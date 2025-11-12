@@ -9,10 +9,7 @@ package fit.test_order_service.entities;/*
  * @version: 1.0
  */
 
-import fit.test_order_service.enums.Gender;
-import fit.test_order_service.enums.OrderStatus;
-import fit.test_order_service.enums.ReviewMode;
-import fit.test_order_service.enums.ReviewStatus;
+import fit.test_order_service.enums.*;
 import fit.test_order_service.utils.TestOrderGenerator;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.*;
@@ -62,6 +59,13 @@ public class TestOrder {
     @NotNull
     @Column(name = "date_of_birth", columnDefinition = "date", nullable = false)
     private LocalDate dateOfBirth;
+
+    @Column(name = "barcode", unique = true) // 'unique = true' là tùy chọn, nhưng nên có
+    private String barcode; // <-- THÊM TRƯỜNG NÀY
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_source")
+    private EntrySource entrySource;
 
     @NotNull
     @Min(0)

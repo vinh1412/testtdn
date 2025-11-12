@@ -866,4 +866,30 @@ public class TestOrderServiceImpl implements TestOrderService {
                 .message("Test order reviewed successfully.")
                 .build();
     }
+
+    @Override
+    public TestOrderResponse createShellOrderFromBarcode(String barcode) {
+        log.info("Auto-creating shell test order for barcode: {}", barcode);
+
+        // TODO: Cân nhắc kiểm tra barcode trùng lặp nếu nghiệp vụ yêu cầu
+        // Ví dụ: if (testOrderRepository.existsByBarcode(barcode)) { ... }
+
+        TestOrder testOrder = new TestOrder();
+        testOrder.setBarcode(barcode); // (Bạn sẽ cần thêm trường này ở bước 4)
+        testOrder.setStatus(OrderStatus.PENDING);
+        testOrder.setEntrySource(EntrySource.AUTO_INSTRUMENT); // (Bạn sẽ cần thêm ở bước 5)
+        testOrder.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+
+        // Đặt createdBy là một giá trị hệ thống đặc biệt
+        // vì không có người dùng nào đăng nhập khi máy gọi
+        testOrder.setCreatedBy("SYSTEM_AUTO_CREATE");
+
+        TestOrder savedTestOrder = testOrderRepository.save(testOrder);
+
+        // Ghi log sự kiện
+        orderEventLogService.logEvent(savedTestOrder, EventType.CREATE,
+                "Shell test order auto-created from instrument for barcode: " + barcode);
+
+        return testOrderMapper.toResponse(savedTestOrder);
+    }
 }

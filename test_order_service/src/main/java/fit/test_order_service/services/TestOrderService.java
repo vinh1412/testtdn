@@ -75,4 +75,6 @@ public interface TestOrderService {
      * @return Thông tin tóm tắt về kết quả review.
      */
     ReviewTestOrderResponse reviewTestOrder(String orderId, ReviewTestOrderRequest request);
+    TestOrderResponse createShellOrderFromBarcode(String barcode);
+
 }
