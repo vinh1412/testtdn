@@ -223,4 +223,18 @@ public class GlobalExceptionHandler {
                 )
         );
     }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ErrorResponse> handleIllegalStateException(IllegalStateException ex, HttpServletRequest request) {
+        ApiResponse<Object> response = ApiResponse.error(ex.getMessage(), HttpStatus.BAD_REQUEST.value());
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(
+                new ErrorResponse(
+                        response.getStatus(),
+                        response.getMessage(),
+                        LocalDateTime.now(),
+                        request.getRequestURI(),
+                        List.of(ex.getMessage())
+                )
+        );
+    }
 }
