@@ -15,13 +15,12 @@ import fit.test_order_service.exceptions.NotFoundException;
 import fit.test_order_service.exceptions.UnauthorizedException;
 import fit.test_order_service.mappers.TestOrderMapper;
 import fit.test_order_service.repositories.*;
-import fit.test_order_service.services.OrderEventLogService;
-import fit.test_order_service.services.TestOrderService;
-import fit.test_order_service.services.TestOrderStatusService;
+import fit.test_order_service.services.*;
 import fit.test_order_service.specifications.TestOrderSpecification;
 import fit.test_order_service.utils.SecurityUtils;
 import fit.test_order_service.utils.SortFields;
 import fit.test_order_service.utils.SortUtils;
+import fit.test_order_service.utils.TestOrderGenerator;
 import fit.test_order_service.validators.TestOrderValidator;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,8 +31,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
-import fit.test_order_service.services.PdfGenerationQueueService;
-import fit.test_order_service.services.ExcelGenerationQueueService;
 
 import org.springframework.transaction.annotation.Transactional;
 
@@ -64,11 +61,12 @@ public class TestOrderServiceImpl implements TestOrderService {
     private final ExcelGenerationQueueService excelGenerationQueueService;
     private final ObjectMapper objectMapper;
     private final TestOrderStatusService testOrderStatusService;
-
-    private final TestResultRepository testResultRepository;
     private final TestResultAdjustLogRepository testResultAdjustLogRepository;
 
+    private final TestResultRepository testResultRepository;
+
     private final OrderCommentRepository orderCommentRepository;
+    private final Hl7ParserService hl7ParserService;
 
     @Override
     public TestOrderResponse createTestOrder(CreateTestOrderRequest request) {
@@ -85,6 +83,7 @@ public class TestOrderServiceImpl implements TestOrderService {
         // 3. Set các thông tin còn lại
         testOrder.setStatus(OrderStatus.PENDING);
         testOrder.setCreatedAt(LocalDateTime.now(ZoneOffset.UTC));
+        testOrder.setBarcode(TestOrderGenerator.generateBarcode());
 
         // 4. Lấy User ID từ SecurityUtils
         String currentUserId = SecurityUtils.getCurrentUserId();
@@ -427,6 +426,8 @@ public class TestOrderServiceImpl implements TestOrderService {
         TestOrderItem testOrderItem = testOrderMapper.toOrderItemEntity(request);
         testOrderItem.setTestCode(catalog.getLocalCode());
         testOrderItem.setOrderRef(testOrder);
+        testOrderItem.setUnit(catalog.getUnit());
+        testOrderItem.setReferenceRange(catalog.getReferenceRange());
 
         String currentUserId = SecurityUtils.getCurrentUserId();
         if (currentUserId == null) {
@@ -568,16 +569,12 @@ public class TestOrderServiceImpl implements TestOrderService {
             throw new UnauthorizedException("Cannot request print job without a logged-in user.");
         }
 
-        // 3. Xử lý các tùy chọn in (tên file, đường dẫn)
+        // 3. Xử lý các tùy chọn in
         String requestedFileName = null;
-        String requestedSavePath = null;
 
         if (request != null) {
             if (request.getCustomFileName() != null && !request.getCustomFileName().isBlank()) {
                 requestedFileName = request.getCustomFileName().trim();
-            }
-            if (request.getCustomSavePath() != null && !request.getCustomSavePath().isBlank()) {
-                requestedSavePath = request.getCustomSavePath().trim();
             }
         }
 
@@ -612,8 +609,8 @@ public class TestOrderServiceImpl implements TestOrderService {
                 .requestedBy(currentUserId)
                 .orderId(orderId)
                 .printOrderRef(testOrder)
-                // Truyền comments vào (có thể là list rỗng, không sao)
-                .paramsJson(createParamsJson(requestedFileName, requestedSavePath, commentsToPrint))
+                // Truyền tham số đã loại bỏ customSavePath
+                .paramsJson(createParamsJson(requestedFileName, commentsToPrint))
                 .build();
 
         ReportJob savedJob = reportJobRepository.save(printJob);
@@ -635,17 +632,14 @@ public class TestOrderServiceImpl implements TestOrderService {
                 .build();
     }
 
-    // --- CẬP NHẬT PHƯƠNG THỨC NÀY ---
-    // Helper để tạo JSON lưu trữ tham số
-    private String createParamsJson(String customFileName, String customSavePath, List<CommentOrderResponse> comments) {
+    // Helper tạo JSON
+    private String createParamsJson(String customFileName, List<CommentOrderResponse> comments) {
         Map<String, Object> params = new HashMap<>();
 
         if (customFileName != null) {
             params.put("customFileName", customFileName);
         }
-        if (customSavePath != null) {
-            params.put("customSavePath", customSavePath);
-        }
+
         // Luôn thêm comments (nếu nó không rỗng)
         if (comments != null && !comments.isEmpty()) {
             params.put("comments", comments);
@@ -670,7 +664,7 @@ public class TestOrderServiceImpl implements TestOrderService {
             throw new UnauthorizedException("Cannot request export job without a logged-in user.");
         }
 
-        // --- Xử lý logic mới cho việc xác định phạm vi export ---
+        // --- Xử lý logic cho việc xác định phạm vi export ---
         List<String> targetOrderIds = new ArrayList<>();
         String dateRangeType = request.getDateRangeType() != null ? request.getDateRangeType() : "THIS_MONTH"; // Mặc định là THIS_MONTH
         LocalDate startDate = request.getStartDate();
@@ -702,14 +696,10 @@ public class TestOrderServiceImpl implements TestOrderService {
             }
         }
 
-        // Lấy tên file và đường dẫn tùy chỉnh (giữ nguyên)
+        // Lấy tên file tùy chỉnh (giữ nguyên)
         String requestedFileName = null;
-        String requestedSavePath = null;
         if (request.getCustomFileName() != null && !request.getCustomFileName().isBlank()) {
             requestedFileName = request.getCustomFileName().trim();
-        }
-        if (request.getCustomSavePath() != null && !request.getCustomSavePath().isBlank()) {
-            requestedSavePath = request.getCustomSavePath().trim();
         }
 
         // Tạo ReportJob
@@ -718,7 +708,7 @@ public class TestOrderServiceImpl implements TestOrderService {
                 .status(JobStatus.QUEUED)
                 .requestedBy(currentUserId)
                 // Lưu tham số mới vào JSON
-                .paramsJson(createExportParamsJson(targetOrderIds, requestedFileName, requestedSavePath, dateRangeType, startDate, endDate))
+                .paramsJson(createExportParamsJson(targetOrderIds, requestedFileName, dateRangeType, startDate, endDate))
                 .build();
 
         ReportJob savedJob = reportJobRepository.save(exportJob);
@@ -737,8 +727,8 @@ public class TestOrderServiceImpl implements TestOrderService {
                 .build();
     }
 
-    // Helper mới để tạo JSON cho export excel (cập nhật tham số)
-    private String createExportParamsJson(List<String> orderIds, String customFileName, String customSavePath,
+    // Helper mới để tạo JSON cho export excel
+    private String createExportParamsJson(List<String> orderIds, String customFileName,
                                           String dateRangeType, LocalDate startDate, LocalDate endDate) {
         Map<String, Object> params = new HashMap<>();
 
@@ -748,9 +738,7 @@ public class TestOrderServiceImpl implements TestOrderService {
         if (customFileName != null) {
             params.put("customFileName", customFileName);
         }
-        if (customSavePath != null) {
-            params.put("customSavePath", customSavePath);
-        }
+
         // Thêm các tham số thời gian
         if (dateRangeType != null) { // Chỉ thêm nếu không phải export theo ID list
             params.put("dateRangeType", dateRangeType);
@@ -772,7 +760,7 @@ public class TestOrderServiceImpl implements TestOrderService {
 
     @Override
     @Transactional
-    public ReviewTestOrderResponse reviewTestOrder(String orderId, ReviewTestOrderRequest request) {
+    public ReviewTestOrderResponse reviewTestOrder(String orderId, ReviewTestOrderHl7Request request) {
         String currentUserId = SecurityUtils.getCurrentUserId();
 
         // 1. Validate Acceptance Criteria: Tồn tại, chưa xóa
@@ -787,59 +775,106 @@ public class TestOrderServiceImpl implements TestOrderService {
         }
 
         ReviewMode mode = request.getReviewMode();
-        List<TestResultAdjustLog> logsToSave = new ArrayList<>();
+        String hl7Status = "NOT_ATTEMPTED";
         int adjustmentsCount = 0;
+        List<TestResultAdjustLog> logsToSave = new ArrayList<>();
 
-        // 3. Xử lý các điều chỉnh (Adjustments)
-        if (request.getAdjustments() != null && !request.getAdjustments().isEmpty()) {
-            for (ResultAdjustmentRequest adj : request.getAdjustments()) {
+        // 3. Xử lý điều chỉnh bằng HL7 (nếu có)
+        if (request.getHl7Message() != null && !request.getHl7Message().isBlank()) {
+            log.info("Processing HL7 adjustments for review of order: {}", orderId);
 
-                // 3a. Tìm kết quả (TestResult)
-                TestResult testResult = testResultRepository.findById(adj.getResultId())
-                        .orElseThrow(() -> new NotFoundException("TestResult not found: " + adj.getResultId()));
-
-                // 3b. Đảm bảo TestResult thuộc về TestOrder này
-                if (!testResult.getOrderId().equals(orderId)) {
-                    throw new BadRequestException(
-                            "TestResult ID " + adj.getResultId() + " does not belong to Order ID " + orderId
-                    );
-                }
-
-                String beforeValue = testResult.getValueText();
-                String afterValue = adj.getNewValueText();
-
-                // 3c. Chỉ xử lý và ghi log nếu giá trị thực sự thay đổi
-                if (!Objects.equals(beforeValue, afterValue)) {
-
-                    // Ghi log cảnh báo về việc validate "acceptable range"
-                    log.warn("TODO: Validate if change from '{}' to '{}' is within acceptable range for analyte {}.",
-                            beforeValue, afterValue, testResult.getAnalyteName());
-
-                    // 3d. Cập nhật giá trị mới cho TestResult
-                    testResult.setValueText(afterValue);
-                    testResultRepository.save(testResult);
-
-                    // 3e. Tạo TestResultAdjustLog
-                    TestResultAdjustLog logEntry = TestResultAdjustLog.builder()
-                            .orderId(orderId)
-                            .resultId(adj.getResultId())
-                            .reviewMode(mode)
-                            .actorUserId(currentUserId)
-                            .field("valueText")
-                            .beforeValue(beforeValue)
-                            .afterValue(afterValue)
-                            .note(adj.getNote())
-                            .build();
-
-                    logsToSave.add(logEntry);
-                    adjustmentsCount++;
-                }
+            // 3a. Parse tin nhắn HL7 để "đọc trước"
+            List<ParsedTestResult> parsedResults;
+            try {
+                parsedResults = hl7ParserService.parseHl7Message(request.getHl7Message());
+            } catch (Exception e) {
+                log.error("Failed to parse HL7 message during review validation", e);
+                throw new BadRequestException("HL7 message is malformed and cannot be parsed: " + e.getMessage());
             }
 
-            // 3f. Lưu tất cả log điều chỉnh
+            if (parsedResults == null || parsedResults.isEmpty()) {
+                throw new BadRequestException("HL7 adjustment message does not contain any valid test results (OBX segments).");
+            }
+
+            // 3b. Validation: Order ID trong payload phải khớp với Order ID đang review (từ URL)
+            String orderIdFromPayload = parsedResults.get(0).getOrderId();
+            if (orderIdFromPayload == null || !Objects.equals(orderId, orderIdFromPayload)) {
+                throw new BadRequestException(
+                        String.format("HL7 message mismatch: The message is for Order ID '%s', but you are reviewing Order ID '%s'.",
+                                orderIdFromPayload, orderId)
+                );
+            }
+
+            // 3c. *** LOGIC ĐIỀU CHỈNH MỚI ***
+            // Chúng ta không gọi Hl7ProcessingService, mà tự xử lý việc cập nhật
+            for (ParsedTestResult parsed : parsedResults) {
+                String analyteName = parsed.getAnalyteName();
+                String newValue = parsed.getValueText();
+
+                if (analyteName == null || newValue == null) {
+                    log.warn("Skipping adjustment for order {}: AnalyteName or ValueText is null in HL7 OBX segment.", orderId);
+                    continue;
+                }
+
+                // Tìm TestResult HIỆN TẠI bằng OrderId và AnalyteName
+                List<TestResult> existingResults = testResultRepository.findByOrderIdAndAnalyteNameIgnoreCase(orderId, analyteName);
+
+                if (existingResults.isEmpty()) {
+                    log.warn("Adjustment skipped: Cannot find an existing TestResult for Order {} and Analyte '{}'", orderId, analyteName);
+                    continue;
+                }
+
+                if (existingResults.size() > 1) {
+                    log.warn("Adjustment skipped: Found {} duplicate TestResults for Order {} and Analyte '{}'. Manual correction required.",
+                            existingResults.size(), orderId, analyteName);
+                    continue;
+                }
+
+                TestResult resultToUpdate = existingResults.get(0);
+                String beforeValue = resultToUpdate.getValueText();
+
+                // Chỉ cập nhật và ghi log nếu giá trị thực sự thay đổi
+                if (Objects.equals(beforeValue, newValue)) {
+                    log.info("Adjustment skipped for Analyte '{}': Value is already correct.", analyteName);
+                    continue;
+                }
+
+                // Cập nhật các trường liên quan từ HL7
+                resultToUpdate.setValueText(newValue);
+                resultToUpdate.setAbnormalFlag(parsed.getAbnormalFlag()); // Cập nhật cờ
+                resultToUpdate.setReferenceRange(parsed.getReferenceRange()); // Cập nhật dải tham chiếu
+                resultToUpdate.setUnit(parsed.getUnit()); // Cập nhật đơn vị
+                resultToUpdate.setMeasuredAt(parsed.getMeasuredAt()); // Cập nhật thời gian đo
+                // Đánh dấu là đã được điều chỉnh (nếu bạn có trường này)
+                // resultToUpdate.setEdited(true);
+
+                testResultRepository.save(resultToUpdate);
+
+                // Tạo TestResultAdjustLog
+                TestResultAdjustLog logEntry = TestResultAdjustLog.builder()
+                        .orderId(orderId)
+                        .resultId(resultToUpdate.getResultId())
+                        .reviewMode(mode)
+                        .actorUserId(currentUserId)
+                        .field("valueText") // Trường chính được thay đổi
+                        .beforeValue(beforeValue)
+                        .afterValue(newValue)
+                        .note("Adjusted via HL7 review. Note: " + request.getNote())
+                        .build();
+
+                logsToSave.add(logEntry);
+                adjustmentsCount++;
+            }
+
             if (!logsToSave.isEmpty()) {
                 testResultAdjustLogRepository.saveAll(logsToSave);
             }
+
+            hl7Status = "PROCESSED_SUCCESSFULLY";
+
+        } else {
+            log.info("Review for order {} submitted with no HL7 adjustments.", orderId);
+            hl7Status = "NOT_PROVIDED";
         }
 
         // 4. Cập nhật trạng thái Review của TestOrder
@@ -851,8 +886,8 @@ public class TestOrderServiceImpl implements TestOrderService {
 
         // 5. Ghi log sự kiện Review chính
         EventType eventType = (mode == ReviewMode.AI) ? EventType.REVIEW_AI : EventType.REVIEW_HUMAN;
-        String logDetails = String.format("Order reviewed. Mode: %s. %d adjustments logged. Note: %s",
-                mode, adjustmentsCount, request.getNote());
+        String logDetails = String.format("Order reviewed. Mode: %s. HL7 Adjustments: %s (%d results). Note: %s",
+                mode, hl7Status, adjustmentsCount, request.getNote());
 
         orderEventLogService.logEvent(testOrder, eventType, logDetails);
 
@@ -863,7 +898,7 @@ public class TestOrderServiceImpl implements TestOrderService {
                 .reviewedBy(currentUserId)
                 .reviewedAt(testOrder.getReviewedAt())
                 .adjustmentsLogged(adjustmentsCount)
-                .message("Test order reviewed successfully.")
+                .message("Test order reviewed successfully. HL7 adjustments: " + hl7Status)
                 .build();
     }
 

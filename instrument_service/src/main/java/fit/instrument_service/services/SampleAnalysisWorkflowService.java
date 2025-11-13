@@ -13,7 +13,7 @@ import fit.instrument_service.dtos.response.WorkflowResponse;
 import java.util.List;
 
 /*
- * @description:
+ * @description: Service quản lý quy trình phân tích mẫu trong hệ thống
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

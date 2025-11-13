@@ -244,17 +244,17 @@ public class TestOrderController {
 
     /**
      * Endpoint để review một Test Order đã COMPLETED.
-     * Cập nhật ReviewStatus thành REVIEWED và ghi lại bất kỳ điều chỉnh kết quả nào.
+     * Cập nhật ReviewStatus thành REVIEWED và ghi lại bất kỳ điều chỉnh kết quả nào (nếu có) thông qua HL7.
      *
      * @param orderId ID của TestOrder cần review.
-     * @param request DTO chứa chế độ review và danh sách các điều chỉnh.
+     * @param request DTO chứa chế độ review, ghi chú, và một tin nhắn HL7 (tùy chọn) để điều chỉnh.
      * @return Thông tin về kết quả review.
      */
     @PostMapping("/{orderId}/review")
     @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
     public ResponseEntity<ApiResponse<ReviewTestOrderResponse>> reviewTestOrder(
             @PathVariable String orderId,
-            @Valid @RequestBody ReviewTestOrderRequest request) {
+            @Valid @RequestBody ReviewTestOrderHl7Request request) {
 
         ReviewTestOrderResponse response = testOrderService.reviewTestOrder(orderId, request);
 

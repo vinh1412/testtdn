@@ -28,11 +28,6 @@ public class ExportExcelRequest {
     @Size(max = 100, message = "Tên file tùy chỉnh không được vượt quá 100 ký tự.")
     private String customFileName;
 
-    // Đường dẫn lưu file tùy chỉnh
-    @Pattern(regexp = "^(?:[a-zA-Z]:\\\\|\\\\\\\\|/)?([^\\\\/:*?\"<>|\\r\\n\\u0000]+\\\\?)*[^\\\\/:*?\"<>|\\r\\n\\u0000]*$",
-            message = "Đường dẫn lưu không hợp lệ.")
-    private String customSavePath;
-
     // *** CÁC TRƯỜNG LỌC THỜI GIAN ***
 
     // Loại khoảng thời gian: TODAY, THIS_MONTH, THIS_YEAR, ALL_TIME, CUSTOM

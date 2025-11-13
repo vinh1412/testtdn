@@ -119,4 +119,22 @@ public class ConfigurationController {
 
         return ResponseEntity.ok(ApiResponse.success(response, "Fetched configurations successfully."));
     }
+
+    /**
+     * Xóa một cấu hình dựa trên ID.
+     * Chỉ người dùng có quyền ADMIN mới có thể thực hiện.
+     */
+    @DeleteMapping("/{id}")
+    @PreAuthorize("hasAnyRole('ADMIN')")
+    public ResponseEntity<ApiResponse<Void>> deleteConfiguration(@PathVariable String id) {
+        configurationService.deleteConfiguration(id);
+
+        // Trả về thông báo thành công
+        return ResponseEntity.ok(ApiResponse.<Void>builder()
+                .success(true)
+                .message("Configuration deleted successfully")
+                .timestamp(LocalDateTime.now())
+                .status(200)
+                .build());
+    }
 }

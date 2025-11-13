@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import java.util.Map;
 
 /*
- * @description:
+ * @description: Feign client to interact with Test Order Service
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

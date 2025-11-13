@@ -20,7 +20,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 /*
- * @description:
+ * @description: Controller for managing sample analysis workflows
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

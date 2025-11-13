@@ -74,7 +74,13 @@ public interface TestOrderService {
      * @param request Dữ liệu review, bao gồm các điều chỉnh.
      * @return Thông tin tóm tắt về kết quả review.
      */
-    ReviewTestOrderResponse reviewTestOrder(String orderId, ReviewTestOrderRequest request);
-    TestOrderResponse createShellOrderFromBarcode(String barcode);
+    ReviewTestOrderResponse reviewTestOrder(String orderId, ReviewTestOrderHl7Request request);
 
+    /**
+     * Tạo đơn xét nghiệm dạng shell từ mã vạch.
+     *
+     * @param barcode Mã vạch của đơn xét nghiệm.
+     * @return Thông tin đơn xét nghiệm được tạo.
+     */
+    TestOrderResponse createShellOrderFromBarcode(String barcode);
 }

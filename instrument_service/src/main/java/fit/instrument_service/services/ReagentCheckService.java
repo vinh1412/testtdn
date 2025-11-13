@@ -7,7 +7,7 @@
 package fit.instrument_service.services;
 
 /*
- * @description:
+ * @description: Service kiểm tra hóa chất của thiết bị
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

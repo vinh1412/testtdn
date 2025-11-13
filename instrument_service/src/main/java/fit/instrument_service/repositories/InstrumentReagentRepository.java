@@ -1,3 +1,4 @@
+
 /*
  * @ {#} InstrumentReagentRepository.java   1.0     12/11/2025
  *
@@ -8,10 +9,12 @@ package fit.instrument_service.repositories;
 
 import fit.instrument_service.entities.InstrumentReagent;
 import fit.instrument_service.enums.ReagentStatus;
+
 import org.springframework.data.mongodb.repository.MongoRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 /*
  * @description: Repository quản lý các hóa chất của thiết bị trong hệ thống
@@ -25,4 +28,9 @@ public interface InstrumentReagentRepository extends MongoRepository<InstrumentR
     List<InstrumentReagent> findByInstrumentIdAndStatus(String instrumentId, ReagentStatus status);
 
     List<InstrumentReagent> findByInstrumentId(String instrumentId);
+
+    // Tìm hóa chất bằng ID và ID thiết bị (để đảm bảo đúng)
+    Optional<InstrumentReagent> findByIdAndInstrumentId(String id, String instrumentId);
+
+    List<InstrumentReagent> findByInstrumentIdAndLotNumberAndIsDeletedFalse(String instrumentId, String lotNumber);
 }

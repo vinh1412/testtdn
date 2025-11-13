@@ -12,7 +12,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 /*
- * @description:
+ * @description:  DTO representing a sample input for workflow initiation
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

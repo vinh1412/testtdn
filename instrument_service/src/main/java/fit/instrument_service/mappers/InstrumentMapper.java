@@ -6,8 +6,10 @@
 
 package fit.instrument_service.mappers;
 
+import fit.instrument_service.dtos.response.InstrumentReagentResponse;
 import fit.instrument_service.dtos.response.InstrumentResponse;
 import fit.instrument_service.entities.Instrument;
+import fit.instrument_service.entities.InstrumentReagent;
 import org.springframework.stereotype.Component;
 
 /*
@@ -28,6 +30,22 @@ public class InstrumentMapper {
                 .lastModeChangeReason(instrument.getLastModeChangeReason())
                 .updatedAt(instrument.getUpdatedAt())
                 .updatedBy(instrument.getUpdatedBy())
+                .build();
+    }
+    public static InstrumentReagentResponse toReagentResponse(InstrumentReagent reagent) {
+        return InstrumentReagentResponse.builder()
+                .id(reagent.getId())
+                .instrumentId(reagent.getInstrumentId())
+                .reagentName(reagent.getReagentName())
+                .lotNumber(reagent.getLotNumber())
+                .quantity(reagent.getQuantity())
+                .expirationDate(reagent.getExpirationDate())
+                .status(reagent.getStatus())
+                .vendor(reagent.getVendor())
+                .createdAt(reagent.getCreatedAt())
+                .createdBy(reagent.getCreatedBy())
+                .updatedAt(reagent.getUpdatedAt())
+                .updatedBy(reagent.getUpdatedBy())
                 .build();
     }
 }

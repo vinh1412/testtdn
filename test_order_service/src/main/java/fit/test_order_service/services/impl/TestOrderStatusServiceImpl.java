@@ -53,6 +53,8 @@ public class TestOrderStatusServiceImpl implements TestOrderStatusService {
             order.setStatus(newStatus);
             order.setUpdatedBy(SecurityUtils.getCurrentUserId());
             order.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
+            order.setRunBy(SecurityUtils.getCurrentUserId());
+            order.setRunAt(LocalDateTime.now(ZoneOffset.UTC));
 
             testOrderRepository.save(order);
 

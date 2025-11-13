@@ -19,14 +19,16 @@ import java.util.Optional;
 @Repository
 public interface ConfigurationSettingRepository extends JpaRepository<ConfigurationSetting, String>, JpaSpecificationExecutor<ConfigurationSetting> {
     /**
-     * Tìm kiếm một ConfigurationSetting bằng tên (để kiểm tra tính duy nhất).
+     * Kiểm tra xem một cấu hình với tên cho trước đã tồn tại hay chưa.
+     *
      * @param name Tên của cấu hình.
-     * @return Optional chứa ConfigurationSetting nếu tìm thấy.
+     * @return true nếu tồn tại, false nếu không.
      */
-    Optional<ConfigurationSetting> findByName(String name);
+    boolean existsByName(String name);
 
     /**
      * Tìm kiếm một ConfigurationSetting theo ID và đảm bảo nó chưa bị xóa.
+     *
      * @param id ID của cấu hình.
      * @return Optional chứa ConfigurationSetting nếu tìm thấy và chưa bị xóa.
      */

@@ -21,6 +21,8 @@ public class TestOrderItemResponse {
     private String id;
     private String testCode;
     private String testName;
+    private String unit;
+    private String referenceRange;
     private ItemStatus status;
     private LocalDateTime createdAt;
     private String createdBy;

@@ -2,12 +2,7 @@
  * @ (#) ExcelGenerationWorker.java    1.0    23/10/2025
  * Copyright (c) 2025 IUH. All rights reserved.
  */
-package fit.test_order_service.services;/*
- * @description:
- * @author: Bao Thong
- * @date: 23/10/2025
- * @version: 1.0
- */
+package fit.test_order_service.services;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -24,6 +19,7 @@ import fit.test_order_service.repositories.TestOrderRepository;
 import fit.test_order_service.utils.ExcelGeneratorUtil;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -48,7 +44,13 @@ public class ExcelGenerationWorker {
     private final ObjectMapper objectMapper;
     private final ExcelGeneratorUtil excelGeneratorUtil;
     private final FileStorageService fileStorageService;
-    private final IamFeignClient iamFeignClient; // Để lấy tên user
+    private final IamFeignClient iamFeignClient;
+
+    @Value("${app.cloudinary.export-folder}")
+    private String excelFolder;
+
+    // Đưa MIME type ra làm hằng số
+    private static final String EXCEL_MIME_TYPE = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
 
     // Hàm bỏ dấu
     private static String removeAccents(String text) {
@@ -65,21 +67,21 @@ public class ExcelGenerationWorker {
     public void generateExcel(String jobId) {
         log.info("Starting Excel generation for job ID: {}", jobId);
         ReportJob job = reportJobRepository.findById(jobId).orElse(null);
-        if (job == null) { /* ... xử lý lỗi ... */
+        if (job == null) {
+            log.error("Job ID {} not found.", jobId);
             return;
         }
 
         List<String> targetOrderIds = Collections.emptyList();
         String customFileName;
-        String customSavePath;
         String dateRangeType;
-        LocalDate startDate = null;   // Bỏ initializer
-        LocalDate endDate = null;     // Bỏ initializer
-        List<TestOrder> ordersToExport; // Chỉ khai báo
+        LocalDate startDate = null;
+        LocalDate endDate = null;
+        List<TestOrder> ordersToExport;
 
 
         try {
-            // 0. Parse Params (cập nhật để đọc date params)
+            // 0. Parse Params
             if (job.getParamsJson() != null && !job.getParamsJson().isBlank()) {
                 try {
                     Map<String, Object> params = objectMapper.readValue(job.getParamsJson(), new TypeReference<>() {
@@ -91,7 +93,7 @@ public class ExcelGenerationWorker {
                         }
                     }
                     customFileName = (String) params.get("customFileName");
-                    customSavePath = (String) params.get("customSavePath");
+
                     // Lấy các tham số thời gian
                     dateRangeType = (String) params.get("dateRangeType");
                     if (params.containsKey("startDate")) {
@@ -109,18 +111,17 @@ public class ExcelGenerationWorker {
             }
 
 
-            // 1. Cập nhật trạng thái Job -> RUNNING (giữ nguyên)
-            // ...
+            // 1. Cập nhật trạng thái Job -> RUNNING
             job.setStatus(JobStatus.RUNNING);
             job.setStartedAt(LocalDateTime.now(ZoneOffset.UTC));
             job.setProgressPct(10);
             reportJobRepository.save(job);
 
 
-            // 2. Lấy danh sách Test Orders cần export (logic mới dựa trên params)
+            // 2. Lấy danh sách Test Orders cần export
             LocalDateTime startDateTime = null;
             LocalDateTime endDateTime = null;
-            boolean queryByDate;
+            boolean queryByDate = false; // <-- Khởi tạo mặc định là false
 
             if (!targetOrderIds.isEmpty()) {
                 // Ưu tiên query theo ID list
@@ -166,26 +167,26 @@ public class ExcelGenerationWorker {
                     ordersToExport = testOrderRepository.findByDeletedFalseAndCreatedAtBetween(startDateTime, endDateTime);
                 } else { // Trường hợp ALL_TIME
                     log.info("Querying ALL non-deleted orders.");
-                    ordersToExport = testOrderRepository.findByDeletedFalse(); // Cần thêm phương thức này vào Repository
+                    ordersToExport = testOrderRepository.findByDeletedFalse();
                 }
 
             } else {
-                // Không có ID list và không có dateRangeType (lỗi logic?)
-                log.warn("No orderIds provided and no dateRangeType specified for job {}. Exporting empty list.", jobId);
-                ordersToExport = Collections.emptyList();
+                // Không có ID list và không có dateRangeType
+                log.warn("No orderIds provided and no dateRangeType specified for job {}. Exporting all non-deleted orders (default).", jobId);
+                // Mặc định là ALL_TIME
+                ordersToExport = testOrderRepository.findByDeletedFalse();
             }
 
 
-            // Lọc bỏ SYSTEM_ORDER_ID (giữ nguyên)
+            // Lọc bỏ SYSTEM_ORDER_ID
             ordersToExport = ordersToExport.stream()
                     .filter(order -> !"SYSTEM_ORDER_ID".equals(order.getOrderId()))
                     .collect(Collectors.toList());
             log.info("Filtered list size after removing SYSTEM_ORDER_ID: {}", ordersToExport.size());
 
 
-            // Kiểm tra danh sách rỗng sau khi lọc (giữ nguyên)
+            // Kiểm tra danh sách rỗng sau khi lọc
             if (ordersToExport.isEmpty()) {
-                // ... (xử lý trả về thành công với message "No data") ...
                 log.warn("No valid Test Orders found to export (after filtering) for job ID: {}", jobId);
                 job.setStatus(JobStatus.SUCCEEDED);
                 job.setMessage("No test orders found matching the criteria (after filtering).");
@@ -199,8 +200,7 @@ public class ExcelGenerationWorker {
             reportJobRepository.save(job);
 
 
-            // 3. Tạo file Excel (giữ nguyên phần còn lại)
-            // ... (code lấy userIds, gọi excelGeneratorUtil, lưu file, cập nhật job) ...
+            // 3. Tạo file Excel
             List<String> userIds = ordersToExport.stream()
                     .flatMap(o -> Stream.of(o.getCreatedBy(), o.getRunBy()))
                     .filter(Objects::nonNull)
@@ -211,7 +211,7 @@ public class ExcelGenerationWorker {
             ByteArrayOutputStream excelStream = excelGeneratorUtil.generateTestOrdersExcel(ordersToExport, userIdToNameMap);
             byte[] excelBytes = excelStream.toByteArray();
 
-            if (excelBytes.length == 0) { // Đã bỏ kiểm tra null
+            if (excelBytes.length == 0) {
                 throw new RuntimeException("Generated Excel is empty.");
             }
             log.info("Generated excelBytes length: {} bytes", excelBytes.length);
@@ -221,15 +221,21 @@ public class ExcelGenerationWorker {
 
             String fileName = determineFileName(customFileName);
 
-            String fileKey = fileStorageService.storeFile(excelBytes, customSavePath, fileName,
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    job.getRequestedBy());
+            // Cập nhật lời gọi: truyền 'null' cho 'requestedDirectoryPath' (tham số thứ 2)
+            String fileKey = fileStorageService.storeFile(
+                    excelBytes,
+                    fileName,
+                    excelFolder,
+                    EXCEL_MIME_TYPE,
+                    job.getRequestedBy()
+            );
 
+            // 'fileKey' bây giờ là URL Cloudinary
             ReportFileStore fileStore = ReportFileStore.builder()
                     .storageType(fileStorageService.getStorageType())
-                    .objectKey(fileKey)
+                    .objectKey(fileKey) // Lưu URL vào objectKey
                     .fileName(fileName)
-                    .mimeType("application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                    .mimeType(EXCEL_MIME_TYPE) // <-- Dùng hằng số
                     .byteSize((long) excelBytes.length)
                     .createdBy(job.getRequestedBy())
                     .build();
@@ -238,59 +244,51 @@ public class ExcelGenerationWorker {
             job.setResultFileId(savedFileStore.getFileId());
             job.setResultFile(savedFileStore);
             job.setStatus(JobStatus.SUCCEEDED);
-            job.setMessage("Excel file generated successfully: " + fileKey);
+            job.setMessage("Excel file generated successfully: " + fileKey); // Message chứa URL
             job.setProgressPct(100);
             job.setFinishedAt(LocalDateTime.now(ZoneOffset.UTC));
             reportJobRepository.save(job);
 
-            log.info("Successfully generated Excel for job ID: {}. File ID: {}. Location: {}", jobId, savedFileStore.getFileId(), fileKey);
+            log.info("Successfully generated Excel for job ID: {}. File ID: {}. Location (URL): {}", jobId, savedFileStore.getFileId(), fileKey);
 
         } catch (Exception e) {
             log.error("Failed to generate Excel for job ID: {}", jobId, e);
-            // Cập nhật job là FAILED (giữ nguyên)
-            // Đã bỏ kiểm tra job != null thừa
+            // Cập nhật job là FAILED
             job.setStatus(JobStatus.FAILED);
             job.setMessage("Error during Excel generation: " + e.getMessage());
             job.setFinishedAt(LocalDateTime.now(ZoneOffset.UTC));
-            job.setProgressPct(job.getProgressPct());
+            job.setProgressPct(job.getProgressPct()); // Giữ % progress lúc xảy ra lỗi
             reportJobRepository.save(job);
         }
     }
 
-    // Helper để lấy tên user (tối ưu: gọi 1 lần cho cả list)
+    // Helper để lấy tên user
     private Map<String, String> fetchUserNames(List<String> userIds) {
         if (userIds == null || userIds.isEmpty()) {
             return Collections.emptyMap();
         }
-        try {
-            // Giả sử có endpoint batch trong IAM service (cần tạo nếu chưa có)
-            // Hoặc lặp qua từng ID nếu không có batch
-            // Ví dụ lặp:
-            Map<String, String> nameMap = new HashMap<>();
-            for (String userId : userIds) {
-                if (userId == null || userId.isBlank() || "SYSTEM".equals(userId)) {
-                    nameMap.put(userId, userId); // Giữ nguyên SYSTEM hoặc null
-                    continue;
-                }
-                try {
-                    ApiResponse<UserInternalResponse> response = iamFeignClient.getUserById(userId);
-                    if (response != null && response.getData() != null && response.getData().fullName() != null) {
-                        nameMap.put(userId, response.getData().fullName());
-                    } else {
-                        nameMap.put(userId, userId + " (Name not found)");
-                    }
-                } catch (Exception e) {
-                    log.error("Error fetching name for user ID {}: {}", userId, e.getMessage());
-                    nameMap.put(userId, userId + " (Error)");
-                }
-            }
-            return nameMap;
 
-        } catch (Exception e) {
-            log.error("Error fetching user names in batch: {}", e.getMessage(), e);
-            // Trả về map rỗng hoặc map với ID + lỗi
-            return userIds.stream().collect(Collectors.toMap(id -> id, id -> id + " (Error)", (v1, v2) -> v1));
+        Map<String, String> nameMap = new HashMap<>();
+        for (String userId : userIds) {
+            if (userId == null || userId.isBlank() || "SYSTEM".equals(userId)) {
+                nameMap.put(userId, userId);
+                continue;
+            }
+            try {
+                ApiResponse<UserInternalResponse> response = iamFeignClient.getUserById(userId);
+                if (response != null && response.getData() != null && response.getData().fullName() != null) {
+                    nameMap.put(userId, response.getData().fullName());
+                } else {
+                    nameMap.put(userId, userId + " (Name not found)");
+                }
+            } catch (Exception e) {
+                log.error("Error fetching name for user ID {}: {}", userId, e.getMessage());
+                nameMap.put(userId, userId + " (Error)");
+            }
         }
+        return nameMap;
+
+        // Ghi chú: Logic batch tối ưu hơn, nhưng logic lặp hiện tại vẫn đúng.
     }
 
 

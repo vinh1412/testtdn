@@ -16,7 +16,7 @@ import lombok.NoArgsConstructor;
 import java.util.List;
 
 /*
- * @description:
+ * @description: Request DTO for initiating a sample analysis workflow
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

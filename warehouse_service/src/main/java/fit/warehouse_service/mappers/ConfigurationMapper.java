@@ -10,6 +10,7 @@ package fit.warehouse_service.mappers;/*
  */
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import fit.warehouse_service.dtos.request.CreateConfigurationRequest;
 import fit.warehouse_service.dtos.response.ConfigurationResponse;
 import fit.warehouse_service.entities.ConfigurationSetting;
 import fit.warehouse_service.enums.DataType;
@@ -17,6 +18,24 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class ConfigurationMapper {
+
+    public ConfigurationSetting toEntity(CreateConfigurationRequest request) {
+        if (request == null) {
+            return null;
+        }
+
+        ConfigurationSetting entity = new ConfigurationSetting();
+
+        entity.setName(request.getName());
+        entity.setDescription(request.getDescription());
+        entity.setDataType(request.getDataType());
+        entity.setValue(request.getValue());
+
+        // Các trường audit (createdAt, createdByUserId...) sẽ được
+        // JPA Auditing tự động xử lý khi lưu (save).
+
+        return entity;
+    }
 
     public ConfigurationResponse toResponse(ConfigurationSetting entity) {
         if (entity == null) {

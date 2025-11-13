@@ -14,17 +14,20 @@ import fit.test_order_service.enums.StorageType;
 public interface FileStorageService {
 
     /**
-     * Lưu trữ file.
+     * Lưu trữ một file.
      *
-     * @param fileBytes      Nội dung file dạng byte array.
-     * @param directoryPath  Đường dẫn thư mục mong muốn (có thể null, khi đó dùng default).
-     * @param fileName       Tên file mong muốn.
-     * @param contentType    Loại MIME của file (vd: "application/pdf").
-     * @param uploaderUserId ID người upload/tạo file.
-     * @return Đường dẫn đầy đủ (absolute path) của file đã lưu.
-     * @throws RuntimeException nếu có lỗi xảy ra.
+     * @param directoryPath Thư mục con mong muốn (ví dụ: "pdf_exports" hoặc "excel_exports").
+     * @param fileBytes  Dữ liệu byte của file.
+     * @param fileName   Tên file (ví dụ: "report.pdf").
+     * @param mimeType   Loại MIME (ví dụ: "application/pdf").
+     * @param uploaderId ID của người tải file lên.
+     * @return Một key duy nhất hoặc URL đại diện cho file đã lưu.
      */
-    String storeFile(byte[] fileBytes, String directoryPath, String fileName, String contentType, String uploaderUserId);
+    String storeFile(byte[] fileBytes,
+                     String fileName,
+                     String directoryPath,
+                     String mimeType,
+                     String uploaderId);
 
     /**
      * Lấy loại hình lưu trữ đang được sử dụng (LOCAL, S3,...).

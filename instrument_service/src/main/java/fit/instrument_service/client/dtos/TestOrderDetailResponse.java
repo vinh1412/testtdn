@@ -9,6 +9,8 @@ package fit.instrument_service.client.dtos;/*
  * @version: 1.0
  */
 
+import fit.instrument_service.client.dtos.enums.Gender;
+import fit.instrument_service.client.dtos.enums.OrderStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;

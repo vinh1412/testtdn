@@ -45,6 +45,12 @@ public class TestOrderItem {
     @Column(name = "test_name", length = 128, nullable = false)
     private String testName;
 
+    @Column(name = "unit", length = 32)
+    private String unit;
+
+    @Column(name = "reference_range", length = 64)
+    private String referenceRange;
+
     @NotNull
     @Enumerated(EnumType.STRING)
     @Column(name = "status", length = 16, nullable = false)

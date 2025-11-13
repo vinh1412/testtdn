@@ -9,7 +9,7 @@ package fit.instrument_service.services;
 import fit.instrument_service.entities.BloodSample;
 
 /*
- * @description:
+ * @description: Service gửi thông báo liên quan đến mẫu máu và thiết bị
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

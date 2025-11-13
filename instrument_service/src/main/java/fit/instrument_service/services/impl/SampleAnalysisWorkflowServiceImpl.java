@@ -6,25 +6,24 @@
 
 package fit.instrument_service.services.impl;
 
+import ca.uhn.hl7v2.HL7Exception;
+import ca.uhn.hl7v2.model.v25.message.ORU_R01;
+import ca.uhn.hl7v2.model.v25.segment.*;
 import ca.uhn.hl7v2.parser.Parser;
 import feign.FeignException;
 import fit.instrument_service.client.TestOrderFeignClient;
+import fit.instrument_service.client.dtos.TestOrderDetailResponse;
 import fit.instrument_service.dtos.request.InitiateWorkflowRequest;
 import fit.instrument_service.dtos.request.SampleInput;
 import fit.instrument_service.dtos.response.SampleResponse;
 import fit.instrument_service.dtos.response.WorkflowResponse;
-import fit.instrument_service.entities.BloodSample;
-import fit.instrument_service.entities.Cassette;
-import fit.instrument_service.entities.Instrument;
-import fit.instrument_service.entities.SampleProcessingWorkflow;
+import fit.instrument_service.entities.*;
 import fit.instrument_service.enums.InstrumentStatus;
+import fit.instrument_service.enums.PublishStatus;
 import fit.instrument_service.enums.SampleStatus;
 import fit.instrument_service.enums.WorkflowStatus;
 import fit.instrument_service.exceptions.NotFoundException;
-import fit.instrument_service.repositories.BloodSampleRepository;
-import fit.instrument_service.repositories.CassetteRepository;
-import fit.instrument_service.repositories.InstrumentRepository;
-import fit.instrument_service.repositories.SampleProcessingWorkflowRepository;
+import fit.instrument_service.repositories.*;
 import fit.instrument_service.services.BarcodeValidationService;
 import fit.instrument_service.services.NotificationService;
 import fit.instrument_service.services.ReagentCheckService;
@@ -35,7 +34,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -52,6 +53,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
 
     private final InstrumentRepository instrumentRepository;
     private final BloodSampleRepository bloodSampleRepository;
+    private final RawTestResultRepository rawTestResultRepository;
     private final SampleProcessingWorkflowRepository workflowRepository;
     private final CassetteRepository cassetteRepository;
     private final BarcodeValidationService barcodeValidationService;
@@ -260,11 +262,29 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         try {
             Thread.sleep(100); // Giả lập thời gian xử lý
 
+            Map<String, String> simulatedResults = new HashMap<>();
+            simulatedResults.put("WBC", String.format("%.1f", 4.0 + (random.nextDouble() * 6.0))); // vd: 7.2
+            simulatedResults.put("RBC", String.format("%.1f", 3.5 + (random.nextDouble() * 2.0))); // vd: 4.8
+            simulatedResults.put("HGB", String.format("%.1f", 12.0 + (random.nextDouble() * 5.0))); // vd: 14.5
+
+            TestOrderDetailResponse orderDetails = null;
+            if (!sample.getTestOrderId().startsWith("PENDING_")) {
+                try {
+                    // Gọi endpoint public để lấy đầy đủ chi tiết
+                    orderDetails = testOrderFeignClient.getTestOrderDetailsById(sample.getTestOrderId()).getData();
+                    log.info("Successfully fetched patient data for PID segment: {}", orderDetails.getFullName());
+                } catch (FeignException e) {
+                    log.warn("Could not fetch patient details for HL7 PID segment. Feign error: {}", e.getMessage());
+                }
+            } else {
+                log.warn("Skipping patient detail fetch for PENDING order.");
+            }
+
             // Chuyển đổi kết quả sang định dạng HL7
-            String hl7Message = convertToHL7(sample);
+            String hl7Message = convertToHL7(sample, simulatedResults, orderDetails);
 
             // Xuất bản kết quả HL7
-            publishResults(hl7Message, sample);
+            publishResults(hl7Message, sample, simulatedResults);
 
             // Cập nhật trạng thái mẫu thành COMPLETED và thông báo
             sample.setStatus(SampleStatus.COMPLETED);
@@ -281,15 +301,172 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         }
     }
 
-    private String convertToHL7(BloodSample sample) {
-        log.debug("Converting sample results to HL7 format: {}", sample.getBarcode());
-        // TODO: Implement actual HL7 conversion (Section 3.6.1.7)
-        return "HL7|" + sample.getBarcode() + "|" + sample.getTestOrderId();
+    private String getHl7DateTime(LocalDateTime ldt) {
+        if(ldt == null) return null;
+        return ldt.format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss"));
     }
 
-    private void publishResults(String hl7Message, BloodSample sample) {
+    // Helper để lấy ngày theo chuẩn HL7
+    private String getHl7Date(LocalDate ld) {
+        if(ld == null) return null;
+        return ld.format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+    }
+
+    private String convertToHL7(BloodSample sample, Map<String, String> results, TestOrderDetailResponse orderDetails) {
+        log.debug("Converting sample results to HL7 format for barcode: {}", sample.getBarcode());
+
+        ORU_R01 oru = new ORU_R01();
+        String messageControlId = "MSG-" + sample.getBarcode() + "-" + System.currentTimeMillis();
+        String now = getHl7DateTime(LocalDateTime.now());
+
+        try {
+            // MSH - Message Header (Thông tin về tin nhắn)
+            MSH msh = oru.getMSH();
+            msh.getFieldSeparator().setValue("|");
+            msh.getEncodingCharacters().setValue("^~\\&");
+            msh.getSendingApplication().getNamespaceID().setValue("INSTRUMENT_SERVICE");
+            msh.getSendingFacility().getNamespaceID().setValue(sample.getInstrumentId()); // Tên máy
+            msh.getReceivingApplication().getNamespaceID().setValue("TEST_ORDER_SERVICE"); // Dịch vụ nhận
+            msh.getReceivingFacility().getNamespaceID().setValue("LIS"); // Hệ thống thông tin Lab
+            msh.getDateTimeOfMessage().getTime().setValue(now);
+            msh.getMessageType().getMessageCode().setValue("ORU"); // Observation Result (Unsolicited)
+            msh.getMessageType().getTriggerEvent().setValue("R01"); // Event R01
+            msh.getMessageControlID().setValue(messageControlId);
+            msh.getProcessingID().getProcessingID().setValue("P"); // P = Production
+            msh.getVersionID().getVersionID().setValue("2.5");
+
+            // Định nghĩa thông tin bệnh nhân
+            PID pid = oru.getPATIENT_RESULT().getPATIENT().getPID();
+            pid.getSetIDPID().setValue("1");
+
+            // Dùng Barcode làm ID bệnh nhân chính (hoặc ID bên ngoài)
+            pid.getPatientIdentifierList(0).getIDNumber().setValue(sample.getBarcode());
+            pid.getPatientIdentifierList(0).getAssigningAuthority().getNamespaceID().setValue("BARCODE");
+
+            if (orderDetails != null) {
+                // Nếu lấy được thông tin, điền vào
+                pid.getPatientName(0).getFamilyName().getSurname().setValue(orderDetails.getFullName()); // Họ và tên
+                pid.getPatientName(0).getGivenName().setValue("");
+                pid.getDateTimeOfBirth().getTime().setValue(getHl7Date(orderDetails.getDateOfBirth() != null ?
+                        LocalDate.parse(orderDetails.getDateOfBirth()) : null)); // Ngày sinh
+                pid.getAdministrativeSex().setValue(orderDetails.getGender().name().substring(0, 1)); // M, F, O
+
+                // Thêm Medical Record Code làm ID nội bộ
+                pid.getPatientIdentifierList(1).getIDNumber().setValue(orderDetails.getMedicalRecordCode());
+                pid.getPatientIdentifierList(1).getAssigningAuthority().getNamespaceID().setValue("MRN"); // Medical Record Number
+            } else {
+                // Nếu không lấy được, điền thông tin mặc định
+                pid.getPatientName(0).getFamilyName().getSurname().setValue("UNKNOWN");
+                pid.getPatientName(0).getGivenName().setValue("Patient");
+            }
+
+            // OBR - Observation Request (Thông tin về yêu cầu xét nghiệm)
+            OBR obr = oru.getPATIENT_RESULT().getORDER_OBSERVATION().getOBR();
+            obr.getSetIDOBR().setValue("1");
+            obr.getPlacerOrderNumber().getEntityIdentifier().setValue(sample.getTestOrderId());
+            obr.getFillerOrderNumber().getEntityIdentifier().setValue(sample.getWorkflowId());
+            obr.getUniversalServiceIdentifier().getIdentifier().setValue("PANEL-AUTO"); // Mã Panel
+            obr.getUniversalServiceIdentifier().getText().setValue("Auto Panel from Instrument"); // Tên Panel
+            obr.getObservationDateTime().getTime().setValue(now); // Thời gian có kết quả
+            obr.getResultStatus().setValue("F"); // F = Final
+
+            // OBX - Observation/Result (Kết quả chi tiết - lặp)
+            int obxSetId = 1;
+            for (Map.Entry<String, String> entry : results.entrySet()) {
+                String testName = entry.getKey();
+                String testValue = entry.getValue();
+
+                // Lấy một segment OBX mới
+                OBX obx = oru.getPATIENT_RESULT().getORDER_OBSERVATION().getOBSERVATION(obxSetId - 1).getOBX();
+                obx.getSetIDOBX().setValue(String.valueOf(obxSetId));
+                obx.getValueType().setValue("NM"); // NM = Numeric (Kiểu số)
+                obx.getObservationIdentifier().getIdentifier().setValue(testName); // Mã xét nghiệm (WBC)
+                obx.getObservationIdentifier().getText().setValue(testName); // Tên xét nghiệm (WBC)
+
+                // Gán giá trị kết quả
+                obx.getObservationValue(0).parse(testValue);
+
+                // TODO: Các đơn vị và dải tham chiếu này nên được lấy từ CSDL
+                if ("WBC".equals(testName)) {
+                    obx.getUnits().getIdentifier().setValue("10^9/L");
+                    obx.getReferencesRange().setValue("4.0-10.0");
+                } else if ("RBC".equals(testName)) {
+                    obx.getUnits().getIdentifier().setValue("10^12/L");
+                    obx.getReferencesRange().setValue("3.5-5.5");
+                } else {
+                    obx.getUnits().getIdentifier().setValue("g/dL");
+                    obx.getReferencesRange().setValue("12.0-17.5");
+                }
+
+                obx.getObservationResultStatus().setValue("F"); // F = Final (Kết quả cuối)
+                obx.getDateTimeOfTheObservation().getTime().setValue(now);
+
+                obxSetId++;
+            }
+
+            // Mã hóa đối tượng HL7 thành chuỗi String
+            return parser.encode(oru);
+
+        } catch (HL7Exception e) {
+            log.error("CRITICAL: Failed to generate HL7 message for barcode {}: {}", sample.getBarcode(), e.getMessage());
+            // Trả về một thông điệp lỗi nếu thất bại
+            return "HL7_ERROR|Failed to generate: " + e.getMessage();
+        }
+    }
+
+    private void publishResults(String hl7Message, BloodSample sample, Map<String, String> rawResults) {
         log.info("Publishing HL7 results for sample: {}", sample.getBarcode());
-        // TODO: Implement actual publishing via RabbitMQ or similar
+        log.debug("HL7 Message: \n{}", hl7Message.replace("\r", "\n"));
+
+        // === BẮT ĐẦU LƯU VÀO DATABASE ===
+        try {
+            RawTestResult rawResult = new RawTestResult();
+            rawResult.setInstrumentId(sample.getInstrumentId());
+            rawResult.setTestOrderId(sample.getTestOrderId());
+            rawResult.setBarcode(sample.getBarcode());
+            rawResult.setHl7Message(hl7Message);
+            rawResult.setRawResultData(rawResults); // Lưu dữ liệu thô (Map)
+
+            // Đặt trạng thái PENDING, chờ một dịch vụ khác (worker)
+            // lấy từ RabbitMQ và xử lý
+            rawResult.setPublishStatus(PublishStatus.PENDING);
+            rawResult.setReadyForDeletion(false); // Chưa sẵn sàng để xóa
+
+            // createdAt/createdBy sẽ được tự động điền bởi MongoCallbackConfig
+
+            rawTestResultRepository.save(rawResult);
+
+            log.info("Saved raw HL7 message to database with ID: {}", rawResult.getId());
+
+            // Cập nhật cờ 'resultsPublished' trên workflow
+            workflowRepository.findById(sample.getWorkflowId()).ifPresent(workflow -> {
+                workflow.setResultsPublished(true); // Đánh dấu là đã lưu
+                workflowRepository.save(workflow);
+            });
+
+            // TODO: Gửi tin nhắn vào RabbitMQ (ví dụ: gửi rawResult.getId())
+            // Bạn đã có RabbitMQConfig, bạn sẽ dùng RabbitTemplate để gửi
+            // rabbitTemplate.convertAndSend(
+            //     RabbitMQConfig.EXCHANGE_NAME,
+            //     RabbitMQConfig.ROUTING_KEY_RESULT, // (Giả sử bạn có routing key này)
+            //     rawResult.getId() // Gửi ID để worker tự truy vấn
+            // );
+
+        } catch (Exception e) {
+            log.error("Failed to save RawTestResult for sample {}: {}", sample.getBarcode(), e.getMessage(), e);
+
+            // Nếu lưu DB thất bại, ta phải đánh dấu Sample là FAILED
+            sample.setStatus(SampleStatus.FAILED);
+            // sample.setSkipReason("Failed to save HL7 result"); // (Ghi chú lý do)
+            bloodSampleRepository.save(sample);
+
+            // Cập nhật Workflow là FAILED
+            workflowRepository.findById(sample.getWorkflowId()).ifPresent(workflow -> {
+                workflow.setStatus(WorkflowStatus.FAILED);
+                workflow.setErrorMessage("Failed to save RawTestResult for sample: " + sample.getBarcode());
+                workflowRepository.save(workflow);
+            });
+        }
     }
 
     @Override

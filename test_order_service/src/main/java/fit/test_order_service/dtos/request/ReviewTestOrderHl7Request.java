@@ -1,23 +1,24 @@
 /*
- * @ (#) ReviewTestOrderRequest.java    1.0    29/10/2025
+ * @ (#) ReviewTestOrderHl7Request.java    1.0    12/11/2025
  * Copyright (c) 2025 IUH. All rights reserved.
  */
 package fit.test_order_service.dtos.request;/*
  * @description:
  * @author: Bao Thong
- * @date: 29/10/2025
+ * @date: 12/11/2025
  * @version: 1.0
  */
 
 import fit.test_order_service.enums.ReviewMode;
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
-import java.util.List;
-
+/**
+ * DTO for reviewing a test order.
+ * Adjustments are now handled via an optional HL7 message string.
+ */
 @Data
-public class ReviewTestOrderRequest {
+public class ReviewTestOrderHl7Request {
 
     // Mặc định là HUMAN nếu không cung cấp
     private ReviewMode reviewMode = ReviewMode.HUMAN;
@@ -25,6 +26,10 @@ public class ReviewTestOrderRequest {
     @Size(max = 500, message = "Overall review note cannot exceed 500 characters")
     private String note;
 
-    @Valid // Đảm bảo các phần tử trong list cũng được validate
-    private List<ResultAdjustmentRequest> adjustments;
+    /**
+     * Optional HL7 message string for result adjustments.
+     * If provided, this message will be processed by the Hl7ProcessingService.
+     */
+    @Size(max = 5000, message = "HL7 message cannot exceed 5000 characters")
+    private String hl7Message;
 }

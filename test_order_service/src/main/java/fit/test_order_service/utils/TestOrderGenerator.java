@@ -42,4 +42,12 @@ public class TestOrderGenerator {
         String uuidSuffix = UUID.randomUUID().toString().replace("-", "").substring(0, 4).toUpperCase();
         return String.format("TIC-%s-%s", datePart, uuidSuffix);
     }
+
+    public String generateBarcode() {
+        String datePart = LocalDateTime.now(ZoneId.of("Asia/Ho_Chi_Minh"))
+                .format(DateTimeFormatter.ofPattern("yyMMddHHmmss"));
+        String uuidSuffix = UUID.randomUUID().toString().replace("-", "").substring(0, 6).toUpperCase();
+        int number = ThreadLocalRandom.current().nextInt(100, 999);
+        return String.format("BC-%s-%s-%d", datePart, uuidSuffix, number);
+    }
 }

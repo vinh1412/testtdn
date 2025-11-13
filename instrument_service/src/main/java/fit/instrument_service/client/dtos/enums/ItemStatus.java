@@ -1,4 +1,4 @@
-package fit.instrument_service.client.dtos;
+package fit.instrument_service.client.dtos.enums;
 
 public enum ItemStatus {
     PENDING, CANCELLED, COMPLETED, IN_PROGRESS;

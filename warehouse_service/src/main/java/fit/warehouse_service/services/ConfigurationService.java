@@ -14,6 +14,7 @@ import fit.warehouse_service.dtos.request.ModifyConfigurationRequest;
 import fit.warehouse_service.dtos.response.ConfigurationResponse;
 import fit.warehouse_service.dtos.response.PageResponse;
 import fit.warehouse_service.enums.DataType;
+import fit.warehouse_service.exceptions.ResourceNotFoundException;
 
 import java.time.LocalDate;
 
@@ -62,4 +63,12 @@ public interface ConfigurationService {
      * @return DTO của cấu hình.
      */
     ConfigurationResponse getConfigurationById(String configurationId);
+
+    /**
+     * Xóa một cấu hình hệ thống dựa trên ID.
+     *
+     * @param id ID của cấu hình cần xóa.
+     * @throws ResourceNotFoundException nếu không tìm thấy cấu hình.
+     */
+    void deleteConfiguration(String id);
 }

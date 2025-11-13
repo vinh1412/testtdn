@@ -209,4 +209,18 @@ public class GlobalExceptionHandler {
                 )
         );
     }
+
+    @ExceptionHandler(AlreadyExistException.class)
+    public ResponseEntity<ErrorResponse> handleAlreadyExistException(AlreadyExistException ex, HttpServletRequest request) {
+        ApiResponse<Object> response = ApiResponse.error(ex.getMessage(), HttpStatus.CONFLICT.value());
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(
+                new ErrorResponse(
+                        response.getStatus(),
+                        response.getMessage(),
+                        LocalDateTime.now(),
+                        request.getRequestURI(),
+                        List.of(ex.getMessage())
+                )
+        );
+    }
 }

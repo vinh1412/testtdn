@@ -9,7 +9,6 @@ package fit.test_order_service.dtos.request;/*
  * @version: 1.0
  */
 
-import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Data;
 
@@ -18,10 +17,4 @@ public class PrintTestOrderRequest {
     // Tên file tùy chỉnh
     @Size(max = 100, message = "Custom file name must not exceed 100 characters.")
     private String customFileName;
-
-    // Đường dẫn lưu file tùy chỉnh
-    // SỬA REGEX Ở ĐÂY: Thay thế \\0 bằng \\u0000
-    @Pattern(regexp = "^(?:[a-zA-Z]:\\\\|\\\\\\\\|/)?([^\\\\/:*?\"<>|\\r\\n\\u0000]+\\\\?)*[^\\\\/:*?\"<>|\\r\\n\\u0000]*$",
-            message = "Invalid save path format or contains illegal characters.")
-    private String customSavePath;
 }

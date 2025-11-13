@@ -16,7 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 /*
- * @description:
+ * @description: DTO representing the response of a workflow status
  * @author: Tran Hien Vinh
  * @date:   12/11/2025
  * @version:    1.0

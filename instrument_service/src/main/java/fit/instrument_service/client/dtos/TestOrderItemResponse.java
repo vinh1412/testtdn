@@ -9,6 +9,7 @@ package fit.instrument_service.client.dtos;/*
  * @version: 1.0
  */
 
+import fit.instrument_service.client.dtos.enums.ItemStatus;
 import lombok.Builder;
 import lombok.Data;
 
@@ -20,6 +21,8 @@ public class TestOrderItemResponse {
     private String id;
     private String testCode;
     private String testName;
+    private String unit;
+    private String referenceRange;
     private ItemStatus status;
     private LocalDateTime createdAt;
     private String createdBy;

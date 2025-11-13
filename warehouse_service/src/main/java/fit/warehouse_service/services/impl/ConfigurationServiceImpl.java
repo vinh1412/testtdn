@@ -19,12 +19,16 @@ import fit.warehouse_service.dtos.response.PageResponse;
 import fit.warehouse_service.entities.ConfigurationSetting;
 import fit.warehouse_service.enums.DataType;
 import fit.warehouse_service.enums.WarehouseActionType;
+import fit.warehouse_service.events.ConfigurationCreatedEvent;
+import fit.warehouse_service.events.ConfigurationDeletedEvent;
 import fit.warehouse_service.exceptions.DuplicateResourceException;
 import fit.warehouse_service.exceptions.NotFoundException;
+import fit.warehouse_service.exceptions.ResourceNotFoundException;
 import fit.warehouse_service.exceptions.ValidateValueFormatException;
 import fit.warehouse_service.mappers.ConfigurationMapper;
 import fit.warehouse_service.repositories.ConfigurationSettingRepository;
 import fit.warehouse_service.services.ConfigurationService;
+import fit.warehouse_service.services.EventPublisherService;
 import fit.warehouse_service.services.WarehouseEventLogService;
 import fit.warehouse_service.specifications.ConfigurationSpecification;
 import fit.warehouse_service.utils.SecurityUtils;
@@ -52,41 +56,40 @@ public class ConfigurationServiceImpl implements ConfigurationService {
     private final WarehouseEventLogService logService;
     private final ConfigurationMapper configurationMapper;
     private final ConfigurationSpecification configurationSpecification;
+    private final EventPublisherService eventPublisherService;
 
     @Override
     @Transactional
     public ConfigurationResponse createConfiguration(CreateConfigurationRequest request) {
-        log.info("Creating new configuration: {}", request.getName());
-
-        // 1. Yêu cầu 3.3.3.1: "must be unique... prevent any duplication"
-        configurationSettingRepository.findByName(request.getName()).ifPresent(c -> {
+        log.info("Creating new configuration with name: {}", request.getName());
+        if (configurationSettingRepository.existsByName(request.getName())) {
             throw new DuplicateResourceException("Configuration with name '" + request.getName() + "' already exists.");
-        });
+        }
 
-        // 2. Yêu cầu 3.3.3.1: "fill out the necessary fields" (đã được DTO validate)
-        ConfigurationSetting newConfig = new ConfigurationSetting();
-        newConfig.setName(request.getName());
-        newConfig.setDescription(request.getDescription());
-        newConfig.setDataType(request.getDataType());
-        newConfig.setValue(request.getValue());
-        // BaseEntity fields (id, createdAt, createdBy) sẽ được tự động điền
+        ConfigurationSetting newSetting = configurationMapper.toEntity(request);
 
-        // 3. Lưu vào DB
-        ConfigurationSetting savedConfig = configurationSettingRepository.save(newConfig);
+        ConfigurationSetting savedSetting = configurationSettingRepository.save(newSetting);
+        log.info("Successfully created configuration with id: {}", savedSetting.getId());
 
-        // 4. Yêu cầu 3.3.3.1: "sync up to other services" (Sử dụng Event Log)
-        String logDetails = logService.createConfigurationCreatedDetails(savedConfig);
+        // Ghi log (đã có)
+        String currentUserId = SecurityUtils.getCurrentUserId();
         logService.logEvent(
                 WarehouseActionType.CONFIG_CREATED,
-                savedConfig.getId(),
-                "ConfigurationSetting",
-                logDetails
+                savedSetting.getId(),
+                "Configuration created: " + savedSetting.getName() + " (ID: " + savedSetting.getId() + ")",
+                currentUserId
         );
 
-        log.info("Successfully created configuration with ID: {}", savedConfig.getId());
-
-        // 5. Yêu cầu 3.3.3.1: "confirming that the configuration has been created successfully"
-        return configurationMapper.toResponse(savedConfig);
+        // Publish event (đã có)
+        ConfigurationCreatedEvent event = new ConfigurationCreatedEvent(
+                savedSetting.getId(),
+                savedSetting.getName(),
+                savedSetting.getDataType().name(), // Gửi dưới dạng String
+                savedSetting.getValue(),
+                savedSetting.getDescription()
+        );
+        eventPublisherService.publishConfigurationCreated(event);
+        return configurationMapper.toResponse(savedSetting);
     }
 
     @Override
@@ -233,5 +236,31 @@ public class ConfigurationServiceImpl implements ConfigurationService {
         } catch (NumberFormatException e) {
             throw new ValidateValueFormatException("Invalid " + dataType.name().toLowerCase() + " format: " + value);
         }
+    }
+
+    @Override
+    @Transactional
+    public void deleteConfiguration(String id) {
+        log.info("Attempting to delete configuration with id: {}", id);
+
+        // 1. & 2. Kiểm tra cấu hình phải tồn tại
+        ConfigurationSetting configuration = configurationSettingRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Configuration with id " + id + " not found."));
+
+        // 3. Xóa cấu hình
+        configurationSettingRepository.delete(configuration);
+        log.info("Successfully deleted configuration with id: {}", id);
+
+        // 4. Ghi lại log hành động (Audit Trail)
+        String currentUserId = SecurityUtils.getCurrentUserId();
+        logService.logEvent(
+                WarehouseActionType.CONFIG_DELETED, // Sử dụng enum
+                id,
+                "Configuration deleted: " + configuration.getName() + " (ID: " + id + ")",
+                currentUserId
+        );
+
+        // 5. Gửi sự kiện để đồng bộ với các service khác
+        eventPublisherService.publishConfigurationDeleted(new ConfigurationDeletedEvent(id));
     }
 }

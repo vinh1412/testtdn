@@ -205,6 +205,8 @@ public class TestOrderMapper {
                 .id(item.getItemId())
                 .testCode(item.getTestCode())
                 .testName(item.getTestName())
+                .unit(item.getUnit())
+                .referenceRange(item.getReferenceRange())
                 .status(item.getStatus())
                 .createdAt(item.getCreatedAt())
                 .createdBy(item.getCreatedBy())

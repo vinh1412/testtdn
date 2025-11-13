@@ -11,6 +11,8 @@ package fit.instrument_service.entities;/*
 
 import fit.instrument_service.embedded.Vendor;
 import fit.instrument_service.enums.ReagentStatus;
+import fit.instrument_service.markers.HasBusinessId;
+import fit.instrument_service.utils.IdGenerator;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.EqualsAndHashCode;
@@ -27,7 +29,7 @@ import java.time.LocalDate;
 @AllArgsConstructor
 @Document(collection = "instrumentReagents")
 // Quản lý các lô hóa chất đang được cài đặt trên thiết bị
-public class InstrumentReagent extends BaseDocument {
+public class InstrumentReagent extends BaseDocument implements HasBusinessId {
 
     @Id
     private String id;
@@ -53,5 +55,12 @@ public class InstrumentReagent extends BaseDocument {
     @Field("vendor")
     private Vendor vendor; // Thông tin nhà cung cấp (Req 3.6.2.1)
 
-    // Ghi chú: 'isDeleted' trong BaseDocument dùng cho Req 3.6.2.3
+    @Override
+    public void assignBusinessId() {
+        if (this.id == null || this.id.isBlank()) {
+            this.setId(IdGenerator.generate("IR")); // Tiền tố "IR"
+        }
+    }
+
+
 }
