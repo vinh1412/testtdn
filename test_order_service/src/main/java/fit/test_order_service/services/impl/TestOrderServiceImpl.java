@@ -53,7 +53,6 @@ public class TestOrderServiceImpl implements TestOrderService {
     private final TestOrderValidator testOrderValidator;
     private final IamFeignClient iamFeignClient;
     private final TestOrderSpecification testOrderSpecification;
-    private final TestOrderItemRepository testOrderItemRepository;
 
     private final TestCatalogRepository testCatalogRepository;
     private final ReportJobRepository reportJobRepository;
@@ -247,13 +246,8 @@ public class TestOrderServiceImpl implements TestOrderService {
                     builder.testOrderId(result.getOrderId());
                     builder.analyteName(result.getAnalyteName());
                     builder.resultValue(result.getValueText());
-
-                    if (result.getItemRef() != null) {
-                        builder.testName(result.getItemRef().getTestName());
-                    } else {
-                        log.warn("TestResult {} has null itemRef. (ItemId: {})", targetId, result.getItemId());
-                        builder.testName("N/A (no item ref)");
-                    }
+                    builder.testName(result.getAnalyteName());
+                    builder.testCode(result.getTestCode());
                 }
             } catch (Exception e) {
                 log.error("Failed to fetch target info for resultId: {}. Error: {}", targetId, e.getMessage());
@@ -278,17 +272,6 @@ public class TestOrderServiceImpl implements TestOrderService {
         testOrder.setDeleted(true);
         testOrder.setDeletedBy(SecurityUtils.getCurrentUserId());
         testOrder.setDeletedAt(LocalDateTime.now(ZoneOffset.UTC));
-
-        // 3. Soft-delete tất cả các TestOrderItem liên quan
-        List<TestOrderItem> items = testOrder.getItems();
-        if (items != null && !items.isEmpty()) {
-            for (TestOrderItem item : items) {
-                item.setDeleted(true);
-                item.setDeletedBy(SecurityUtils.getCurrentUserId());
-                item.setDeletedAt(LocalDateTime.now(ZoneOffset.UTC));
-            }
-            testOrderItemRepository.saveAll(items);
-        }
 
         // 4. Lưu lại thay đổi của TestOrder
         testOrderRepository.save(testOrder);
@@ -401,149 +384,6 @@ public class TestOrderServiceImpl implements TestOrderService {
         }
 
         return PageResponse.from(dtoPage, filterInfo);
-    }
-
-    @Override
-    @Transactional
-    public TestOrderItemResponse addTestOrderItem(String orderId, AddTestOrderItemRequest request) {
-        TestOrder testOrder = testOrderRepository.findByOrderIdAndDeletedFalse(orderId)
-                .orElseThrow(() -> new NotFoundException("Test order not found with id: " + orderId));
-
-        // Check for duplicate testName in the same order
-        boolean isDuplicate = testOrder.getItems().stream()
-                .anyMatch(item -> !item.isDeleted() &&
-                        item.getTestName().equalsIgnoreCase(request.getTestName()));
-
-        if (isDuplicate) {
-            throw new BadRequestException("Test already exists in this order: " + request.getTestName());
-        }
-
-
-        // Validate that the test name exists in the catalog
-        TestCatalog catalog = testCatalogRepository.findByTestNameIgnoreCaseAndActiveTrue(request.getTestName().trim())
-                .orElseThrow(() -> new BadRequestException("Test '" + request.getTestName() + "' is not in the catalog. Please add it first."));
-
-        TestOrderItem testOrderItem = testOrderMapper.toOrderItemEntity(request);
-        testOrderItem.setTestCode(catalog.getLocalCode());
-        testOrderItem.setOrderRef(testOrder);
-        testOrderItem.setUnit(catalog.getUnit());
-        testOrderItem.setReferenceRange(catalog.getReferenceRange());
-
-        String currentUserId = SecurityUtils.getCurrentUserId();
-        if (currentUserId == null) {
-            throw new IllegalStateException("Cannot create test order item without a logged-in user.");
-        }
-        // Gán CreatedBy cho đối tượng testOrderItem
-        testOrderItem.setCreatedBy(currentUserId);
-
-        TestOrderItem savedItem = testOrderItemRepository.save(testOrderItem);
-
-        // Kiểm tra và cập nhật Order status khi có item mới
-        testOrderStatusService.handleNewItemAdded(orderId);
-
-        String logDetails = "Added new test item: " + savedItem.getTestCode() + " - " + savedItem.getTestName();
-        orderEventLogService.logEvent(testOrder, EventType.ADD_ORDER_ITEM, logDetails);
-
-        return testOrderMapper.toOrderItemResponse(savedItem);
-    }
-
-    @Override
-    @Transactional
-    public TestOrderItemResponse updateTestOrderItem(String orderId, String itemId, UpdateTestOrderItemRequest request) {
-        // Validate and fetch existing order
-        TestOrder testOrder = testOrderRepository.findByOrderIdAndDeletedFalse(orderId)
-                .orElseThrow(() -> new NotFoundException("Test order not found with id: " + orderId));
-
-        // Validate and fetch existing order item
-        TestOrderItem existingItem = testOrderItemRepository.findByItemIdAndOrderRefOrderIdAndDeletedFalse(itemId, testOrder.getOrderId())
-                .orElseThrow(() -> new NotFoundException("Test order item not found with id: " + itemId + " for order id: " + orderId));
-
-        // Create a copy of the existing order for comparison
-        TestOrderItem beforeUpdate = new TestOrderItem();
-        BeanUtils.copyProperties(existingItem, beforeUpdate);
-
-        if (request.getTestName() != null && !request.getTestName().isBlank()) {
-            existingItem.setTestName(request.getTestName());
-        }
-
-        if (request.getStatus() != null && !request.getStatus().isBlank()) {
-            ItemStatus newStatus = ItemStatus.valueOf(request.getStatus());
-            ItemStatus currentStatus = existingItem.getStatus();
-
-            if (!Objects.equals(existingItem.getStatus(), newStatus)) {
-                if (!currentStatus.canTransitionTo(newStatus)) {
-                    throw new BadRequestException(String.format(
-                            "Cannot change item status from %s to %s", currentStatus, newStatus
-                    ));
-                }
-                existingItem.setStatus(newStatus);
-            }
-        }
-
-        String currentUserId = SecurityUtils.getCurrentUserId();
-        if (currentUserId == null) {
-            throw new IllegalStateException("Cannot create test order item without a logged-in user.");
-        }
-        // Update UpdatedBy for the order item
-        existingItem.setUpdatedBy(currentUserId);
-
-        TestOrderItem afterUpdate = testOrderItemRepository.save(existingItem);
-
-        // Cập nhật Order status nếu item status thay đổi
-        testOrderStatusService.updateOrderStatusIfNeeded(orderId);
-
-        orderEventLogService.logTestOrderItemUpdate(beforeUpdate, afterUpdate, EventType.UPDATE_ORDER_ITEM);
-
-        return testOrderMapper.toOrderItemResponse(afterUpdate);
-    }
-
-    @Override
-    public TestOrderItemResponse getTestOrderItemById(String orderId, String itemId) {
-        // 1. Kiểm tra sự tồn tại của TestOrder
-        if (!testOrderRepository.existsByOrderId(orderId)) {
-            throw new NotFoundException("Test order not found with id: " + orderId);
-        }
-
-
-        // 2. Tìm TestOrderItem
-        TestOrderItem testOrderItem = testOrderItemRepository.findByOrderRefOrderIdAndItemIdAndDeletedFalse(orderId, itemId)
-                .orElseThrow(() -> new NotFoundException("Test order item not found with id: " + itemId + " in order: " + orderId));
-
-        // 3. Ghi log sự kiện
-        orderEventLogService.logEvent(testOrderItem.getOrderRef(), EventType.VIEW_ORDER_ITEM, "Viewed details for test order item ID: " + itemId);
-
-        // 4. Map sang DTO và trả về
-        return testOrderMapper.toOrderItemResponse(testOrderItem);
-    }
-
-    @Override
-    @Transactional
-    public void deleteTestOrderItem(String orderId, String itemId) {
-        TestOrder testOrder = testOrderRepository.findByOrderIdAndDeletedFalse(orderId)
-                .orElseThrow(() -> new NotFoundException("Test order not found with id: " + orderId));
-
-        if (testOrder.getStatus() == OrderStatus.COMPLETED) {
-            throw new BadRequestException("Cannot delete item from a completed test order.");
-        }
-
-        TestOrderItem testOrderItem = testOrderItemRepository.findByItemIdAndDeletedFalse(itemId)
-                .orElseThrow(() -> new NotFoundException("Test order item not found with id: " + itemId));
-
-        if (!testOrderItem.getOrderRef().getOrderId().equals(orderId)) {
-            throw new NotFoundException("Test order item with id " + itemId + " does not belong to order with id " + orderId);
-        }
-
-        testOrderItem.setDeleted(true);
-        testOrderItem.setDeletedBy(SecurityUtils.getCurrentUserId());
-        testOrderItem.setDeletedAt(LocalDateTime.now(ZoneOffset.UTC));
-
-        testOrderItemRepository.save(testOrderItem);
-
-        // Cập nhật Order status sau khi xóa item
-        testOrderStatusService.updateOrderStatusIfNeeded(orderId);
-
-        String logDetails = "Soft deleted test item: " + testOrderItem.getTestCode() + " - " + testOrderItem.getTestName();
-        orderEventLogService.logEvent(testOrder, EventType.DELETE_ORDER_ITEM, logDetails);
     }
 
     @Override
@@ -845,6 +685,7 @@ public class TestOrderServiceImpl implements TestOrderService {
                 resultToUpdate.setReferenceRange(parsed.getReferenceRange()); // Cập nhật dải tham chiếu
                 resultToUpdate.setUnit(parsed.getUnit()); // Cập nhật đơn vị
                 resultToUpdate.setMeasuredAt(parsed.getMeasuredAt()); // Cập nhật thời gian đo
+                resultToUpdate.setTestCode(parsed.getTestCode());
                 // Đánh dấu là đã được điều chỉnh (nếu bạn có trường này)
                 // resultToUpdate.setEdited(true);
 

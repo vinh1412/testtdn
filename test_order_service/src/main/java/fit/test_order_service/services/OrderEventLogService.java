@@ -10,7 +10,6 @@ package fit.test_order_service.services;/*
  */
 
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
 import fit.test_order_service.enums.EventType;
 
 public interface OrderEventLogService {
@@ -31,13 +30,4 @@ public interface OrderEventLogService {
      * @param type    Loại sự kiện (UPDATED, etc.).
      */
     void logOrderUpdate(TestOrder before, TestOrder after, EventType type);
-
-    /**
-     * Ghi lại sự thay đổi của một test order item.
-     *
-     * @param before  Trạng thái trước khi thay đổi.
-     * @param after   Trạng thái sau khi thay đổi.
-     * @param type    Loại sự kiện (ITEM_ADDED, ITEM_UPDATED, etc.).
-     */
-    void logTestOrderItemUpdate(TestOrderItem before, TestOrderItem after, EventType type);
 }

@@ -61,14 +61,14 @@ public class Hl7ProcessingController {
     }
 
     @PostMapping("/{testOrderId}/request")
-    public ResponseEntity<ApiResponse<String>> sendOrderToInstrument(
+    public ResponseEntity<ApiResponse<Hl7ProcessResponse>> sendOrderToInstrument(
             @PathVariable String testOrderId
     ) {
         log.info("[API] Sending HL7 order request for TestOrder ID: {}", testOrderId);
-        String response = hl7OrderSenderService.requestAnalysis(testOrderId);
+        Hl7ProcessResponse response = hl7OrderSenderService.sendOrderAndProcessResult(testOrderId);
 
         return ResponseEntity.ok(
-                ApiResponse.success(response, "HL7 order request sent successfully")
+                ApiResponse.success(response, "HL7 order request built successfully")
         );
     }
 }

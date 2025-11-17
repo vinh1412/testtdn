@@ -6,4 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface ReagentLotRepository extends JpaRepository<ReagentLot, String> {
+    ReagentLot findByLotNumber(String lotNumber);
 }

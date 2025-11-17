@@ -12,7 +12,7 @@ import ca.uhn.hl7v2.parser.Parser;
 import fit.test_order_service.dtos.response.Hl7Metadata;
 import fit.test_order_service.dtos.response.ParsedTestResult;
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
+import fit.test_order_service.entities.TestResult;
 import fit.test_order_service.enums.AbnormalFlag;
 import fit.test_order_service.exceptions.BadRequestException;
 import fit.test_order_service.services.Hl7ParserService;
@@ -88,7 +88,7 @@ public class Hl7ParserServiceImpl implements Hl7ParserService {
     }
 
     @Override
-    public String buildHl7OrderMessage(TestOrder testOrder, List<TestOrderItem> testOrderItems) {
+    public String buildHl7OrderMessage(TestOrder testOrder, List<TestResult> testResults) {
         StringBuilder hl7 = new StringBuilder();
 
         // --- MSH Segment ---
@@ -120,20 +120,24 @@ public class Hl7ParserServiceImpl implements Hl7ParserService {
                 .append(testOrder.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMddHHmmss")))
                 .append("\r");
 
-        // OBX Segments (Thông tin của từng TestOrderItem)
+        // OBX Segments (Thông tin của từng kết quả xét nghiệm dự kiến)
         int index = 1;
-        for (TestOrderItem item : testOrderItems) {
-            hl7.append("OBX|")
-                    .append(index++).append("|") // Set ID
-                    .append("ST|") // Value Type: String
-                    .append(item.getTestCode()).append("^")
-                    .append(item.getTestName())
-                    .append("|1|") // Observation Sub-ID
-                    .append("|") // Không có giá trị vì là yêu cầu, không phải kết quả
-                    .append("|") // Unit (bỏ trống)
-                    .append("|") // Reference Range
-                    .append("|N|||P") // Normal, Preliminary
-                    .append("\r");
+        if (testResults != null) {
+            for (TestResult result : testResults) {
+                hl7.append("OBX|")
+                        .append(index++).append("|") // Set ID
+                        .append("ST|") // Value Type: String
+                        .append(result.getTestCode() != null ? result.getTestCode() : testCodeGenerator.generateTemporaryCode())
+                        .append("^")
+                        .append(result.getAnalyteName())
+                        .append("|1|") // Observation Sub-ID
+                        .append("|") // Không có giá trị vì là yêu cầu, không phải kết quả
+                        .append(result.getUnit() != null ? result.getUnit() : "")
+                        .append("|") // Unit
+                        .append(result.getReferenceRange() != null ? result.getReferenceRange() : "")
+                        .append("|N|||P") // Normal, Preliminary
+                        .append("\r");
+            }
         }
 
         return hl7.toString();
@@ -240,29 +244,21 @@ public class Hl7ParserServiceImpl implements Hl7ParserService {
         }
     }
 
-    /**
-     * Chuẩn hóa testCode từ HL7 thành local code theo TestCatalog
-     */
-    private String normalizeTestCode(String rawTestCode, String analyteName) {
-        // Tìm theo raw testCode trước
-        String normalizedCode = testCodeGenerator.findLocalCodeByTestCode(rawTestCode);
-        if (normalizedCode != null) {
-            log.debug("Found local code {} for raw test code {}", normalizedCode, rawTestCode);
-            return normalizedCode;
+    private LocalDateTime parseTimestamp(TS ts) {
+        if (ts == null || ts.getTime() == null) {
+            return null;
         }
-
-        // Tìm theo tên xét nghiệm
-        if (analyteName != null && !analyteName.trim().isEmpty()) {
-            normalizedCode = testCodeGenerator.findLocalCodeByTestName(analyteName);
-            if (normalizedCode != null) {
-                log.debug("Found local code {} for test name {}", normalizedCode, analyteName);
-                return normalizedCode;
-            }
+        String value = ts.getTime().getValue();
+        if (value == null || value.isBlank()) {
+            return null;
         }
-
-        // Fallback: giữ nguyên raw code
-        log.warn("Using raw test code {} as no mapping found", rawTestCode);
-        return rawTestCode;
+        try {
+            DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+            return LocalDateTime.parse(value.substring(0, Math.min(value.length(), 14)), formatter);
+        } catch (Exception e) {
+            log.warn("Failed to parse timestamp {}: {}", value, e.getMessage());
+            return null;
+        }
     }
 
     // Phân tích cờ bất thường từ chuỗi ký tự
@@ -282,32 +278,42 @@ public class Hl7ParserServiceImpl implements Hl7ParserService {
         }
     }
 
-    // Phân tích timestamp từ kiểu dữ liệu TS của HL7
-    private LocalDateTime parseTimestamp(TS timestamp) {
-        // Kiểm tra null
-        if (timestamp == null || timestamp.getTime() == null) {
-            return LocalDateTime.now();
+    private String normalizeTestCode(String rawTestCode, String analyteName) {
+        if (rawTestCode != null && !rawTestCode.isBlank()) {
+            return rawTestCode;
         }
-
-        try {
-            // Lấy chuỗi thời gian
-            String timeStr = timestamp.getTime().getValue();
-            // HL7 timestamp format: YYYYMMDDHHMMSS
-            if (timeStr.length() >= 8) {
-                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
-
-                // Đảm bảo chuỗi có đủ độ dài
-                while (timeStr.length() < 14) {
-                    timeStr += "0";
-                }
-
-                // Trá về LocalDateTime đã phân tích
-                return LocalDateTime.parse(timeStr, formatter);
-            }
-        } catch (Exception e) {
-            log.warn("Failed to parse timestamp: {}", timestamp.getTime().getValue());
+        if (analyteName != null && !analyteName.isBlank()) {
+            return testCodeGenerator.generateFromName(analyteName);
         }
-
-        return LocalDateTime.now();
+        return testCodeGenerator.generateTemporaryCode();
     }
+
+    // Phân tích timestamp từ kiểu dữ liệu TS của HL7
+//    private LocalDateTime parseTimestamp(TS timestamp) {
+//        // Kiểm tra null
+//        if (timestamp == null || timestamp.getTime() == null) {
+//            return LocalDateTime.now();
+//        }
+//
+//        try {
+//            // Lấy chuỗi thời gian
+//            String timeStr = timestamp.getTime().getValue();
+//            // HL7 timestamp format: YYYYMMDDHHMMSS
+//            if (timeStr.length() >= 8) {
+//                DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMddHHmmss");
+//
+//                // Đảm bảo chuỗi có đủ độ dài
+//                while (timeStr.length() < 14) {
+//                    timeStr += "0";
+//                }
+//
+//                // Trá về LocalDateTime đã phân tích
+//                return LocalDateTime.parse(timeStr, formatter);
+//            }
+//        } catch (Exception e) {
+//            log.warn("Failed to parse timestamp: {}", timestamp.getTime().getValue());
+//        }
+//
+//        return LocalDateTime.now();
+//    }
 }

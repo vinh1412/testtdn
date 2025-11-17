@@ -13,7 +13,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import fit.test_order_service.entities.OrderEventLog;
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
 import fit.test_order_service.enums.EventType;
 import fit.test_order_service.repositories.OrderEventLogRepository;
 import fit.test_order_service.services.OrderEventLogService;
@@ -89,51 +88,11 @@ public class OrderEventLogServiceImpl implements OrderEventLogService {
         orderEventLogRepository.save(log);
     }
 
-    @Override
-    public void logTestOrderItemUpdate(TestOrderItem before, TestOrderItem after, EventType type) {
-        String currentUserId = Optional.ofNullable(SecurityUtils.getCurrentUserId()).orElse("SYSTEM");
-
-        Map<String, Map<String, String>> changes = new LinkedHashMap<>();
-        compare(changes, "testName", before.getTestName(), after.getTestName());
-        compare(changes, "status", before.getStatus(), after.getStatus());
-
-        if (changes.isEmpty()) return;
-
-        String details = "Test order item updated - Changed fields: " + toJson(changes);
-        String beforeJson = toJson(snapshotTestOrderItem(before));
-        String afterJson = toJson(snapshotTestOrderItem(after));
-
-        OrderEventLog log = OrderEventLog.builder()
-                .orderRef(after.getOrderRef())
-                .orderId(after.getOrderRef().getOrderId())
-                .eventType(type)
-                .actorUserId(currentUserId)
-                .details(details)
-                .beforeJson(beforeJson)
-                .afterJson(afterJson)
-                .ipAddress(RequestUtils.getIpAddress())
-                .userAgent(RequestUtils.getUserAgent())
-                .build();
-
-        orderEventLogRepository.save(log);
-    }
-
     // Helper method to compare values and record changes
     private void compare(Map<String, Map<String, String>> map, String field, Object oldVal, Object newVal) {
         if (!Objects.equals(oldVal, newVal)) {
             map.put(field, Map.of("from", String.valueOf(oldVal), "to", String.valueOf(newVal)));
         }
-    }
-
-    private Map<String, Object> snapshotTestOrderItem(TestOrderItem testOrderItem) {
-        Map<String, Object> snapshot = new LinkedHashMap<>();
-        snapshot.put("itemId", testOrderItem.getItemId());
-        snapshot.put("itemCode", testOrderItem.getTestCode());
-        snapshot.put("orderId", testOrderItem.getOrderRef().getOrderId());
-        snapshot.put("testName", testOrderItem.getTestName());
-        snapshot.put("status", testOrderItem.getStatus());
-        snapshot.put("updatedBy", testOrderItem.getUpdatedBy());
-        return snapshot;
     }
 
     private Map<String, Object> snapshot(TestOrder order) {

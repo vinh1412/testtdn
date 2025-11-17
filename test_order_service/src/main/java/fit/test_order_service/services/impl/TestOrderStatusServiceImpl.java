@@ -7,7 +7,7 @@
 package fit.test_order_service.services.impl;
 
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
+import fit.test_order_service.entities.TestResult;
 import fit.test_order_service.enums.EventType;
 import fit.test_order_service.enums.ItemStatus;
 import fit.test_order_service.enums.OrderStatus;
@@ -59,7 +59,7 @@ public class TestOrderStatusServiceImpl implements TestOrderStatusService {
             testOrderRepository.save(order);
 
             String logMessage = String.format(
-                    "Order status auto-updated from %s to %s based on item completion",
+                    "Order status auto-updated from %s to %s based on result completion",
                     previousStatus, newStatus
             );
             orderEventLogService.logEvent(order, EventType.UPDATE, logMessage);
@@ -68,61 +68,13 @@ public class TestOrderStatusServiceImpl implements TestOrderStatusService {
         }
     }
 
-    @Override
-    public void handleNewItemAdded(String orderId) {
-        TestOrder order = testOrderRepository.findByOrderIdAndDeletedFalse(orderId)
-                .orElseThrow(() -> new NotFoundException("Order not found: " + orderId));
-
-        // Nếu order đã COMPLETED và có thêm item mới PENDING → chuyển về IN_PROGRESS
-        if (order.getStatus() == OrderStatus.COMPLETED) {
-            boolean hasNewPendingItems = order.getItems().stream()
-                    .anyMatch(item -> !item.isDeleted() &&
-                            (item.getStatus() == ItemStatus.PENDING || item.getStatus() == ItemStatus.IN_PROGRESS));
-
-            if (hasNewPendingItems) {
-                OrderStatus previousStatus = order.getStatus();
-                order.setStatus(OrderStatus.IN_PROGRESS);
-                order.setUpdatedBy(SecurityUtils.getCurrentUserId());
-                order.setUpdatedAt(LocalDateTime.now(ZoneOffset.UTC));
-
-                testOrderRepository.save(order);
-
-                String logMessage = String.format(
-                        "Order status reverted from %s to %s due to new test items added",
-                        previousStatus, OrderStatus.IN_PROGRESS
-                );
-                orderEventLogService.logEvent(order, EventType.UPDATE, logMessage);
-
-                log.info("Order {} status reverted from {} to {} - new items added",
-                        orderId, previousStatus, OrderStatus.IN_PROGRESS);
-            }
-        }
-    }
-
     private OrderStatus determineOrderStatus(TestOrder order) {
-        List<TestOrderItem> activeItems = order.getItems().stream()
-                .filter(item -> !item.isDeleted())
-                .toList();
-
-        if (activeItems.isEmpty()) {
+        List<TestResult> results = order.getResults();
+        if (results == null || results.isEmpty()) {
             return OrderStatus.PENDING;
         }
 
-        boolean hasCompleted = activeItems.stream()
-                .anyMatch(item -> item.getStatus() == ItemStatus.COMPLETED);
-
-        boolean hasInProgress = activeItems.stream()
-                .anyMatch(item -> item.getStatus() == ItemStatus.IN_PROGRESS);
-
-        boolean allCompleted = activeItems.stream()
-                .allMatch(item -> item.getStatus() == ItemStatus.COMPLETED);
-
-        if (allCompleted) {
-            return OrderStatus.COMPLETED;
-        } else if (hasCompleted || hasInProgress) {
-            return OrderStatus.IN_PROGRESS;
-        } else {
-            return OrderStatus.PENDING;
-        }
+        // Nếu đã có kết quả thì xem như đã hoàn tất
+        return OrderStatus.COMPLETED;
     }
 }

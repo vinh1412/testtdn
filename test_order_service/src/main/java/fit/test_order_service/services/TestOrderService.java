@@ -34,21 +34,6 @@ public interface TestOrderService {
                                                      LocalDate startDate, LocalDate endDate, OrderStatus status, ReviewStatus reviewStatus,
                                                      ReviewMode reviewMode, Gender gender, String createdBy, String reviewedBy);
 
-    TestOrderItemResponse addTestOrderItem(String orderId, AddTestOrderItemRequest request);
-
-    void deleteTestOrderItem(String orderId, String itemId);
-
-    TestOrderItemResponse updateTestOrderItem(String orderId, String itemId, UpdateTestOrderItemRequest request);
-
-    /**
-     * Lấy thông tin chi tiết của một TestOrderItem.
-     *
-     * @param orderId ID của TestOrder.
-     * @param itemId  ID của TestOrderItem.
-     * @return Chi tiết của TestOrderItem.
-     */
-    TestOrderItemResponse getTestOrderItemById(String orderId, String itemId);
-
     /**
      * Khởi tạo một job chạy ngầm để in kết quả Test Order ra file PDF.
      *

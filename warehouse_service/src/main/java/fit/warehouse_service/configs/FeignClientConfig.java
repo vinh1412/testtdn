@@ -47,4 +47,7 @@ public class FeignClientConfig {
     public ErrorDecoder errorDecoder() {
         return new FeignErrorDecoder();
     }
+
+
+
 }

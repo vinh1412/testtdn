@@ -3,6 +3,7 @@ package fit.warehouse_service.controllers;
 import fit.warehouse_service.dtos.request.LogReagentUsageRequest;
 import fit.warehouse_service.dtos.request.ReceiveReagentRequest;
 import fit.warehouse_service.dtos.response.ApiResponse;
+import fit.warehouse_service.dtos.response.ReagentLotStatusResponse;
 import fit.warehouse_service.dtos.response.ReagentSupplyHistoryResponse;
 import fit.warehouse_service.dtos.response.ReagentUsageHistoryResponse;
 import fit.warehouse_service.services.ReagentHistoryService;
@@ -122,6 +123,36 @@ public class ReagentHistoryController {
                 .message(message)
                 .timestamp(LocalDateTime.now())
                 .data(historyPage)
+                .build();
+
+        return ResponseEntity.ok(apiResponse);
+    }
+    @GetMapping("/validate-stock")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER', 'LAB_USER')") // Giữ bảo mật tương tự các endpoint khác
+    public ResponseEntity<Void> validateReagentStock(
+            @RequestParam String vendorId,
+            @RequestParam String lotNumber) {
+
+        boolean exists = reagentHistoryService.checkReagentStockExists(vendorId, lotNumber);
+
+        if (exists) {
+            return ResponseEntity.ok().build(); // 200 OK - Tồn tại
+        } else {
+            return ResponseEntity.notFound().build(); // 404 Not Found - Không tồn tại
+        }
+    }
+    @GetMapping("/lot-status")
+    @PreAuthorize("hasAnyRole('ADMIN','MANAGER', 'LAB_USER')")
+    public ResponseEntity<ApiResponse<ReagentLotStatusResponse>> getLotStatus(@RequestParam String lotNumber) {
+
+        ReagentLotStatusResponse responseDto = reagentHistoryService.getReagentLotStatus(lotNumber);
+
+        ApiResponse<ReagentLotStatusResponse> apiResponse = ApiResponse.<ReagentLotStatusResponse>builder()
+                .success(true)
+                .status(HttpStatus.OK.value())
+                .message("Reagent lot status retrieved successfully.")
+                .timestamp(LocalDateTime.now())
+                .data(responseDto)
                 .build();
 
         return ResponseEntity.ok(apiResponse);

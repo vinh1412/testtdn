@@ -6,6 +6,7 @@ package fit.warehouse_service.services.impl;
 
 import fit.warehouse_service.dtos.request.LogReagentUsageRequest;
 import fit.warehouse_service.dtos.request.ReceiveReagentRequest;
+import fit.warehouse_service.dtos.response.ReagentLotStatusResponse;
 import fit.warehouse_service.dtos.response.ReagentSupplyHistoryResponse;
 import fit.warehouse_service.dtos.response.ReagentUsageHistoryResponse;
 import fit.warehouse_service.entities.*;
@@ -267,5 +268,29 @@ public class ReagentHistoryServiceImpl implements ReagentHistoryService {
 
 
         return historyPage.map(usageHistoryMapper::toResponse);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public boolean checkReagentStockExists(String vendorId, String lotNumber) {
+        log.info("Validating stock for Vendor ID: {} and Lot Number: {}", vendorId, lotNumber);
+
+        return historyRepository.existsByVendorIdAndLotNumber(vendorId, lotNumber);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ReagentLotStatusResponse getReagentLotStatus(String lotNumber) {
+        log.info("Fetching lot status for LotNumber: {}", lotNumber);
+
+        // Tìm lot bằng lotNumber
+        ReagentLot reagentLot = reagentLotRepository.findByLotNumber(lotNumber);
+
+        if (reagentLot == null) {
+            throw new NotFoundException("ReagentLot not found with LotNumber: " + lotNumber);
+        }
+
+        // Trả về ID và số lượng hiện tại
+        return new ReagentLotStatusResponse(reagentLot.getId(), reagentLot.getCurrentQuantity());
     }
 }

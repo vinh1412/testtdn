@@ -9,7 +9,7 @@ package fit.test_order_service.services;
 import fit.test_order_service.dtos.response.Hl7Metadata;
 import fit.test_order_service.dtos.response.ParsedTestResult;
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
+import fit.test_order_service.entities.TestResult;
 
 import java.util.List;
 
@@ -40,8 +40,8 @@ public interface Hl7ParserService {
      * Xây dựng tin nhắn HL7 từ order và các item liên quan.
      *
      * @param testOrder đối tượng TestOrder
-     * @param testOrderItems danh sách các TestOrderItem liên quan
+     * @param testResults danh sách các TestResult liên quan đến order
      * @return chuỗi tin nhắn HL7 được xây dựng
      */
-    String buildHl7OrderMessage(TestOrder testOrder, List<TestOrderItem> testOrderItems);
+    String buildHl7OrderMessage(TestOrder testOrder, List<TestResult> testResults);
 }

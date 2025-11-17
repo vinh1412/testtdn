@@ -60,8 +60,6 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
 
     private final Hl7ParserService hl7ParserService;
 
-    private final TestOrderItemRepository testOrderItemRepository;
-
     private final TestOrderRepository testOrderRepository;
 
     private final Hl7Validator hl7Validator;
@@ -131,24 +129,18 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
                     continue;
                 }
 
-                // Tìm hoặc tạo TestOrderItem
-                TestOrderItem orderItem = findExistingOrderItem(order, parsed);
-
-                if (orderItem == null) {
-                    log.warn("TestOrderItem not found for test code [{}] or analyte [{}], skipping",
-                            parsed.getTestCode(), parsed.getAnalyteName());
-                    continue; // Skip this result and continue with others
-                }
+                TestResult result = testResultRepository
+                        .findByOrderIdAndAnalyteNameIgnoreCase(orderId, parsed.getAnalyteName())
+                        .stream()
+                        .findFirst()
+                        .map(existing -> updateExistingResult(existing, parsed, messageId, fullSource))
+                        .orElseGet(() -> createTestResult(parsed, messageId, fullSource, order));
 
                 // Tạo và lưu TestResult
-                TestResult result = createTestResult(parsed, messageId, fullSource, orderItem);
                 TestResult saved = testResultRepository.save(result);
 
                 // Thu thập resultId
                 resultIds.add(saved.getResultId());
-
-                // Cập nhật status của TestOrderItem sau khi có kết quả
-                updateOrderItemStatus(orderItem);
 
                 // Áp dụng quy tắc đánh dấu (flagging rules)
                 flaggingService.applyFlaggingRules(saved);
@@ -197,36 +189,6 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
         return false; // Default persist
     }
 
-    // Tìm TestOrderItem dựa trên kết quả phân tích
-    private TestOrderItem findExistingOrderItem(TestOrder order, ParsedTestResult parsed) {
-        String parsedCode = parsed.getTestCode();
-        String parsedName = parsed.getAnalyteName();
-
-        // Thử match theo code trước
-        Optional<TestOrderItem> byCode = order.getItems().stream()
-                .filter(i -> !i.isDeleted())
-                .filter(i -> parsedCode != null && parsedCode.equalsIgnoreCase(i.getTestCode()))
-                .findFirst();
-
-        if (byCode.isPresent()) return byCode.get();
-
-        // Nếu không match code, thử match theo name (fallback)
-        Optional<TestOrderItem> byName = order.getItems().stream()
-                .filter(i -> !i.isDeleted())
-                .filter(i -> parsedName != null && parsedName.equalsIgnoreCase(i.getTestName()))
-                .findFirst();
-
-        return byName.orElse(null);
-    }
-
-    // Cập nhật trạng thái của TestOrderItem
-    private void updateOrderItemStatus(TestOrderItem orderItem) {
-        if (orderItem.getStatus() == ItemStatus.PENDING) {
-            orderItem.setStatus(ItemStatus.COMPLETED);
-            testOrderItemRepository.save(orderItem);
-        }
-    }
-
     // Lưu tin nhắn HL7 thô vào cơ sở dữ liệu
     private Hl7RawMessage saveRawMessage(Hl7MessageRequest request, String messageId, String source) {
         Hl7RawMessage rawMessage = Hl7RawMessage.builder()
@@ -249,11 +211,25 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
         return ingestAuditRepository.save(audit);
     }
 
+    // Cập nhật TestResult tồn tại với kết quả phân tích mới
+    private TestResult updateExistingResult(TestResult existing, ParsedTestResult parsed, String sourceMsgId, String sendingApp) {
+        existing.setValueText(parsed.getValueText());
+        existing.setUnit(parsed.getUnit());
+        existing.setReferenceRange(parsed.getReferenceRange());
+        existing.setAbnormalFlag(parsed.getAbnormalFlag());
+        existing.setMeasuredAt(parsed.getMeasuredAt());
+        existing.setSourceMsgId(sourceMsgId);
+        existing.setEnteredBy(sendingApp);
+        existing.setEntrySource(EntrySource.HL7);
+        existing.setTestCode(parsed.getTestCode());
+        return existing;
+    }
+
     // Tạo TestResult từ kết quả phân tích
-    private TestResult createTestResult(ParsedTestResult parsed, String sourceMsgId, String sendingApp ,TestOrderItem item) {
+    private TestResult createTestResult(ParsedTestResult parsed, String sourceMsgId, String sendingApp, TestOrder order) {
         return TestResult.builder()
                 .orderId(parsed.getOrderId())
-                .itemId(item.getItemId())
+                .testCode(parsed.getTestCode())
                 .enteredBy(sendingApp)
                 .entrySource(EntrySource.HL7)
                 .analyteName(parsed.getAnalyteName())
@@ -263,8 +239,7 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
                 .abnormalFlag(parsed.getAbnormalFlag())
                 .measuredAt(parsed.getMeasuredAt())
                 .sourceMsgId(sourceMsgId)
-                .orderRef(item.getOrderRef())
-                .itemRef(item)
+                .orderRef(order)
                 .build();
     }
 

@@ -56,17 +56,17 @@ public class InstrumentController {
                 HttpStatus.CREATED
         );
     }
-    @PatchMapping("/{instrumentId}/reagents/{reagentId}/status")
-    @PreAuthorize("hasAnyRole('ADMIN', 'TECHNICIAN', 'LAB_USER')") // Điều chỉnh quyền theo yêu cầu
-    public ResponseEntity<ApiResponse<InstrumentReagentResponse>> modifyReagentStatus(
-            @PathVariable String instrumentId,
-            @PathVariable String reagentId,
-            @Valid @RequestBody ModifyReagentStatusRequest request) {
-
-        InstrumentReagentResponse updatedReagent = instrumentService.modifyReagentStatus(instrumentId, reagentId, request);
-
-        return ResponseEntity.ok(
-                ApiResponse.success(updatedReagent, "Reagent status updated successfully")
-        );
-    }
+//    @PatchMapping("/{instrumentId}/reagents/{reagentId}/status")
+//    @PreAuthorize("hasAnyRole('ADMIN', 'TECHNICIAN', 'LAB_USER')") // Điều chỉnh quyền theo yêu cầu
+//    public ResponseEntity<ApiResponse<InstrumentReagentResponse>> modifyReagentStatus(
+//            @PathVariable String instrumentId,
+//            @PathVariable String reagentId,
+//            @Valid @RequestBody ModifyReagentStatusRequest request) {
+//
+//        InstrumentReagentResponse updatedReagent = instrumentService.modifyReagentStatus(instrumentId, reagentId, request);
+//
+//        return ResponseEntity.ok(
+//                ApiResponse.success(updatedReagent, "Reagent status updated successfully")
+//        );
+//    }
 }

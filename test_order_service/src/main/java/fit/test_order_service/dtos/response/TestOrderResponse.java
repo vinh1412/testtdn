@@ -48,6 +48,4 @@ public class TestOrderResponse {
 
     private LocalDateTime deletedAt;
     private String deletedBy;
-
-    private List<TestOrderItemResponse> items;
 }

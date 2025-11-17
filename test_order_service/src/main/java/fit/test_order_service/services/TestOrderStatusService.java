@@ -19,11 +19,4 @@ public interface TestOrderStatusService {
      * @param orderId Mã TestOrder cần cập nhật trạng thái
      */
     void updateOrderStatusIfNeeded(String orderId);
-
-    /**
-     * Xử lý khi có mục mới được thêm vào TestOrder.
-     *
-     * @param orderId Mã TestOrder có mục mới được thêm
-     */
-    void handleNewItemAdded(String orderId);
 }

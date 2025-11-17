@@ -26,7 +26,6 @@ import java.time.LocalDateTime;
 @AllArgsConstructor
 public class ParsedTestResult {
     private String orderId;
-    private String itemId;
     private String testCode;
     private String analyteName;
     private String valueText;

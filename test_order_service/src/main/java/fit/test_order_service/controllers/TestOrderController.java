@@ -138,62 +138,6 @@ public class TestOrderController {
         return ResponseEntity.ok(ApiResponse.success(response, "Test orders retrieved successfully"));
     }
 
-    @PostMapping("/{orderId}/items")
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
-    public ResponseEntity<ApiResponse<TestOrderItemResponse>> addTestOrderItem(
-            @PathVariable String orderId,
-            @Valid @RequestBody AddTestOrderItemRequest request) {
-        TestOrderItemResponse response = testOrderService.addTestOrderItem(orderId, request);
-        ApiResponse<TestOrderItemResponse> apiResponse = ApiResponse.<TestOrderItemResponse>builder()
-                .success(true)
-                .status(HttpStatus.CREATED.value())
-                .message("Test order item added successfully")
-                .data(response)
-                .build();
-        return new ResponseEntity<>(apiResponse, HttpStatus.CREATED);
-    }
-
-    @PutMapping("/{orderId}/items/{itemId}")
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
-    public ResponseEntity<ApiResponse<TestOrderItemResponse>> updateTestOrderItem(
-            @PathVariable("orderId") String orderId,
-            @PathVariable("itemId") String itemId,
-            @Valid @RequestBody UpdateTestOrderItemRequest request) {
-
-        TestOrderItemResponse response = testOrderService.updateTestOrderItem(orderId, itemId, request);
-
-        return ResponseEntity.ok(ApiResponse.success(response, "Test order item updated successfully"));
-    }
-
-    @DeleteMapping("/{orderId}/items/{itemId}")
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
-    public ResponseEntity<ApiResponse<Void>> deleteTestOrderItem(
-            @PathVariable String orderId,
-            @PathVariable String itemId) {
-        testOrderService.deleteTestOrderItem(orderId, itemId);
-        ApiResponse<Void> apiResponse = ApiResponse.<Void>builder()
-                .success(true)
-                .status(HttpStatus.OK.value())
-                .message("Test order item deleted successfully.")
-                .build();
-        return new ResponseEntity<>(apiResponse, HttpStatus.OK);
-    }
-
-    @GetMapping("/{orderId}/items/{itemId}")
-    @PreAuthorize("hasAnyRole('ADMIN','MANAGER')")
-    public ResponseEntity<ApiResponse<TestOrderItemResponse>> getTestOrderItemById(
-            @PathVariable String orderId,
-            @PathVariable String itemId) {
-        TestOrderItemResponse response = testOrderService.getTestOrderItemById(orderId, itemId);
-        ApiResponse<TestOrderItemResponse> apiResponse = ApiResponse.<TestOrderItemResponse>builder()
-                .success(true)
-                .status(HttpStatus.OK.value())
-                .message("Test order item details retrieved successfully")
-                .data(response)
-                .build();
-        return new ResponseEntity<>(apiResponse, HttpStatus.OK);
-    }
-
     /**
      * Endpoint để yêu cầu in kết quả của một Test Order.
      * Quá trình in sẽ chạy ngầm.

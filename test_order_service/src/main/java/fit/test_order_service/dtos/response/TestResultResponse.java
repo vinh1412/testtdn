@@ -26,6 +26,8 @@ import java.time.LocalDateTime;
 public class TestResultResponse {
     private String id;
     private String analyteName;
+    private String testName;
+    private String testCode;
     private String value;
     private String unit;
     private String referenceRange;
@@ -36,5 +38,4 @@ public class TestResultResponse {
     private LocalDateTime enteredAt;
     private String flagCode;
     private FlagSeverity flagSeverity;
-    private String testCode;
 }

@@ -48,7 +48,6 @@ public class TestOrderDetailResponse {
     private ReviewMode reviewMode;
     private LocalDateTime reviewedAt;
     private String reviewedBy;
-    private List<TestOrderItemResponse> items;
     private List<TestResultResponse> results;
     private List<CommentOrderResponse> comments;
 }

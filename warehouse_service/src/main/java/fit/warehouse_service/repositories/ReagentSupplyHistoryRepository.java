@@ -11,4 +11,8 @@ import org.springframework.stereotype.Repository;
 @Repository
 public interface ReagentSupplyHistoryRepository extends JpaRepository<ReagentSupplyHistory, String>,
         JpaSpecificationExecutor<ReagentSupplyHistory> {
+
+    boolean existsByVendorIdAndLotNumber(String vendorId, String lotNumber);
+
+
 }

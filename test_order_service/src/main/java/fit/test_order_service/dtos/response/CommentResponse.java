@@ -20,6 +20,7 @@ import lombok.*;
 public class CommentResponse {
     private CommentTargetType targetType;
     private String testOrderId;
+    private String testCode;
     private String resultId;
     private String testName;
     private String analyteName;

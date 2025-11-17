@@ -145,11 +145,6 @@ public class TestOrder {
     @Column(name = "deleted_by", length = 36)
     private String deletedBy;
 
-    /* Relations (read-only refs) */
-    @OneToMany(mappedBy = "orderRef", fetch = FetchType.LAZY)
-    @OrderBy("createdAt DESC")
-    private List<TestOrderItem> items;
-
     @OneToMany(mappedBy = "orderRef", fetch = FetchType.LAZY)
     @OrderBy("createdAt DESC")
     private List<TestResult> results;

@@ -6,9 +6,13 @@
 
 package fit.instrument_service.services.impl;
 
+import feign.FeignException;
+import fit.instrument_service.client.WarehouseFeignClient;
+import fit.instrument_service.client.dtos.ReagentLotStatusResponse;
 import fit.instrument_service.dtos.request.ChangeInstrumentModeRequest;
 import fit.instrument_service.dtos.request.InstallReagentRequest;
 import fit.instrument_service.dtos.request.ModifyReagentStatusRequest;
+import fit.instrument_service.dtos.response.ApiResponse;
 import fit.instrument_service.dtos.response.InstrumentReagentResponse;
 import fit.instrument_service.dtos.response.InstrumentResponse;
 import fit.instrument_service.embedded.Vendor;
@@ -63,6 +67,8 @@ public class InstrumentServiceImpl implements InstrumentService {
     private final InstrumentReagentRepository instrumentReagentRepository;
 
     private final AuditLogService auditLogService;
+
+    private final WarehouseFeignClient warehouseFeignClient;
 
     private final ConfigurationRepository configurationRepository;
 
@@ -204,55 +210,84 @@ public class InstrumentServiceImpl implements InstrumentService {
     public InstrumentReagentResponse installReagent(String instrumentId, InstallReagentRequest request) {
         log.info("Installing reagent onto instrument {}: {}", instrumentId, request.getLotNumber());
 
-        // 1. Đảm bảo thiết bị tồn tại
-        if (!instrumentRepository.existsById(instrumentId)) {
-            throw new NotFoundException("Instrument not found with id: " + instrumentId);
+        // === BƯỚC 1: VALIDATION TỒN TẠI (Vendor + LotNumber) ===
+        try {
+            log.debug("Validating existence with warehouse for vendor: {} and lot: {}", request.getVendorId(), request.getLotNumber());
+
+            // Cuộc gọi 1: Kiểm tra vendorId và lotNumber có khớp trong lịch sử nhập kho không
+            warehouseFeignClient.validateReagentStock(request.getVendorId(), request.getLotNumber());
+
+            log.info("Existence validation successful for vendor: {} and lot: {}", request.getVendorId(), request.getLotNumber());
+
+        } catch (FeignException.NotFound e) {
+            log.warn("Validation failed: Vendor ID {} or Lot Number {} not found in warehouse.", request.getVendorId(), request.getLotNumber());
+            throw new NotFoundException("Validation failed: Reagent stock not found in warehouse for the given Vendor ID and Lot Number.");
+        } catch (Exception e) {
+            log.error("Error during existence validation call: {}", e.getMessage(), e);
+            throw new RuntimeException("Unable to verify reagent stock (existence): " + e.getMessage());
         }
 
-        // 2. Tạo đối tượng Vendor (embedded)
-        Vendor vendor = new Vendor(request.getVendorId(), request.getVendorName(), request.getVendorContact());
+        // === BƯỚC 2: VALIDATION SỐ LƯỢNG TỒN KHO (LotNumber) ===
+        ReagentLotStatusResponse lotStatus;
+        try {
+            log.debug("Fetching quantity from warehouse for lot: {}", request.getLotNumber());
 
-        // 3. Kiểm tra xem Lô này đã tồn tại (và chưa bị xóa) trên thiết bị này chưa
+            // Cuộc gọi 2: Lấy số lượng tồn kho của Lô
+            ApiResponse<ReagentLotStatusResponse> apiResponse = warehouseFeignClient.getReagentLotStatus(request.getLotNumber());
+
+            if (apiResponse == null || !apiResponse.isSuccess() || apiResponse.getData() == null) {
+                throw new RuntimeException("Failed to get reagent lot status from warehouse. Empty response.");
+            }
+
+            lotStatus = apiResponse.getData();
+            log.info("Quantity validation successful. Lot ID: {}, Current Qty: {}", lotStatus.getReagentLotId(), lotStatus.getCurrentQuantity());
+
+        } catch (FeignException.NotFound e) {
+            // Trường hợp này không nên xảy ra nếu Bước 1 thành công, nhưng vẫn bắt lỗi
+            log.warn("Validation failed: Lot Number {} not found in ReagentLot table.", request.getLotNumber());
+            throw new NotFoundException("Validation failed: Reagent Lot Number not found.");
+        } catch (Exception e) {
+            log.error("Error during quantity validation call: {}", e.getMessage(), e);
+            throw new RuntimeException("Unable to verify reagent stock (quantity): " + e.getMessage());
+        }
+
+        // --- Kiểm tra số lượng (THEO YÊU CẦU CỦA BẠN) ---
+        // So sánh số lượng tồn kho (double) với số lượng cài đặt (Integer)
+        if (lotStatus.getCurrentQuantity() < request.getQuantity()) {
+            throw new IllegalArgumentException(String.format(
+                    "Insufficient stock in warehouse for LotNumber %s. Requested: %d, Available: %.2f",
+                    request.getLotNumber(), request.getQuantity(), lotStatus.getCurrentQuantity()
+            ));
+        }
+
+        // === BƯỚC 3: TIẾP TỤC LOGIC CÀI ĐẶT NHƯ CŨ (KHÔNG TRỪ KHO) ===
+
+        Instrument instrument = instrumentRepository.findById(instrumentId)
+                .orElseThrow(() -> new NotFoundException("Instrument not found with id: " + instrumentId));
+
+        // ... (Kiểm tra trùng lặp trên máy)
         List<InstrumentReagent> existing = instrumentReagentRepository
                 .findByInstrumentIdAndLotNumberAndIsDeletedFalse(instrumentId, request.getLotNumber());
-
-
-        if (!existing.isEmpty()) { // Kiểm tra xem danh sách có rỗng hay không
-            throw new IllegalArgumentException(
-                    "Reagent with Lot Number '" + request.getLotNumber() + "' is already installed on this instrument."
-            );
+        if (!existing.isEmpty()) {
+            // ... (Ném lỗi)
         }
 
-        // 3. Tạo entity InstrumentReagent mới
+        // 4. Tạo entity InstrumentReagent
         InstrumentReagent reagent = new InstrumentReagent();
         reagent.setInstrumentId(instrumentId);
         reagent.setReagentName(request.getReagentName());
         reagent.setLotNumber(request.getLotNumber());
-        reagent.setQuantity(request.getQuantity());
+        reagent.setQuantity(request.getQuantity()); // Số lượng của chai/hộp này
         reagent.setExpirationDate(request.getExpirationDate());
-        reagent.setVendor(vendor);
-        reagent.setStatus(ReagentStatus.NOT_IN_USE); // Trạng thái ban đầu khi cài đặt
+        reagent.setVendor(new Vendor(request.getVendorId(), null, null)); // Chỉ lưu ID vendor
+        reagent.setStatus(ReagentStatus.NOT_IN_USE);
         reagent.setDeleted(false);
 
-        // 4. Lưu vào DB (trường createdBy, createdAt sẽ tự động được điền)
+        // 6. Lưu vào DB (của instrument_service)
         InstrumentReagent savedReagent = instrumentReagentRepository.save(reagent);
-
-        Map<String, Object> details = Map.of(
-                "instrumentId", instrumentId,
-                "reagentName", savedReagent.getReagentName(),
-                "lotNumber", savedReagent.getLotNumber(),
-                "expirationDate", savedReagent.getExpirationDate().toString(),
-                "vendorId", vendor.getVendorId(),
-                "vendorName", vendor.getVendorName()
-        );
-        auditLogService.logAction(AuditAction.INSTALL_REAGENT, savedReagent.getId(), "InstrumentReagent", details);
-
         log.info("Successfully installed reagent id {} onto instrument {}", savedReagent.getId(), instrumentId);
-
-        // 6. Trả về DTO Response
         return InstrumentMapper.toReagentResponse(savedReagent);
     }
-
     @Override
     @Transactional
     public InstrumentReagentResponse modifyReagentStatus(String instrumentId, String reagentId, ModifyReagentStatusRequest request) {

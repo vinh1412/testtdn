@@ -1,14 +1,10 @@
 package fit.test_order_service.mappers;
 
 import fit.test_order_service.client.dtos.PatientMedicalRecordInternalResponse;
-import fit.test_order_service.dtos.request.AddTestOrderItemRequest;
-import fit.test_order_service.dtos.request.UpdateTestOrderItemRequest;
 import fit.test_order_service.dtos.response.*;
 import fit.test_order_service.entities.OrderComment;
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
 import fit.test_order_service.entities.TestResult;
-import fit.test_order_service.enums.ItemStatus;
 import fit.test_order_service.utils.DateUtils;
 import org.springframework.stereotype.Component;
 
@@ -85,7 +81,6 @@ public class TestOrderMapper {
                 .reviewedBy(testOrder.getReviewedBy())
                 .deletedAt(DateUtils.toVietnamTime(testOrder.getDeletedAt()))
                 .deletedBy(testOrder.getDeletedBy())
-                .items(toOrderItemResponseList(testOrder.getItems()))
                 .build();
     }
 
@@ -121,7 +116,6 @@ public class TestOrderMapper {
                 .reviewedAt(testOrder.getReviewedAt())
                 .reviewedBy(testOrder.getReviewedBy())
                 .results(toResultResponseList(testOrder.getResults()))
-                .items(toOrderItemResponseList(testOrder.getItems()))
                 .build();
     }
 
@@ -135,6 +129,8 @@ public class TestOrderMapper {
         return TestResultResponse.builder()
                 .id(testResult.getResultId())
                 .analyteName(testResult.getAnalyteName())
+                .testName(testResult.getAnalyteName())
+                .testCode(testResult.getTestCode())
                 .value(testResult.getValueText())
                 .unit(testResult.getUnit())
                 .referenceRange(testResult.getReferenceRange())
@@ -145,7 +141,6 @@ public class TestOrderMapper {
                 .enteredAt(testResult.getEnteredAt())
                 .flagCode(testResult.getFlagCode())
                 .flagSeverity(testResult.getFlagSeverity())
-                .testCode(testResult.getItemRef() != null ? testResult.getItemRef().getTestCode() : null)
                 .build();
     }
 
@@ -185,47 +180,6 @@ public class TestOrderMapper {
         }
         return orderComments.stream()
                 .map(this::toCommentResponse)
-                .collect(Collectors.toList());
-    }
-
-    public TestOrderItem toOrderItemEntity(AddTestOrderItemRequest request) {
-        if (request == null) {
-            return null;
-        }
-        TestOrderItem item = new TestOrderItem();
-        item.setTestName(request.getTestName());
-        return item;
-    }
-
-    public TestOrderItemResponse toOrderItemResponse(TestOrderItem item) {
-        if (item == null) {
-            return null;
-        }
-        return TestOrderItemResponse.builder()
-                .id(item.getItemId())
-                .testCode(item.getTestCode())
-                .testName(item.getTestName())
-                .unit(item.getUnit())
-                .referenceRange(item.getReferenceRange())
-                .status(item.getStatus())
-                .createdAt(item.getCreatedAt())
-                .createdBy(item.getCreatedBy())
-                .updatedAt(item.getUpdatedAt())
-                .updatedBy(item.getUpdatedBy())
-                .deletedAt(item.getDeletedAt())
-                .deletedBy(item.getDeletedBy())
-                .isDeleted(item.isDeleted())
-                .build();
-    }
-    /**
-     * Converts a list of TestOrderItem entities to a list of TestOrderItemResponse DTOs.
-     */
-    public List<TestOrderItemResponse> toOrderItemResponseList(List<TestOrderItem> items) {
-        if (items == null || items.isEmpty()) {
-            return Collections.emptyList();
-        }
-        return items.stream()
-                .map(this::toOrderItemResponse)
                 .collect(Collectors.toList());
     }
 }

@@ -27,8 +27,8 @@ import java.util.UUID;
 @Entity
 @Table(name = "test_result", indexes = {
         @Index(name = "idx_result_order", columnList = "order_id"),
-        @Index(name = "idx_result_item", columnList = "item_id"),
         @Index(name = "idx_result_analyte", columnList = "analyte_name"),
+        @Index(name = "idx_result_test_code", columnList = "test_code"),
         @Index(name = "idx_result_flag", columnList = "flag_code, flag_severity"),
         @Index(name = "idx_result_rule_ver", columnList = "applied_rule_version")
 })
@@ -47,7 +47,7 @@ public class TestResult {
     private String orderId;
 
     @Column(name = "item_id", length = 36)
-    private String itemId;
+    private String testCode;
 
     @NotNull
     @Enumerated(EnumType.STRING)
@@ -113,11 +113,6 @@ public class TestResult {
             foreignKey = @ForeignKey(name = "fk_result_order"), insertable = false, updatable = false)
     private TestOrder orderRef;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "item_id", referencedColumnName = "item_id",
-            foreignKey = @ForeignKey(name = "fk_result_item"), insertable = false, updatable = false)
-    private TestOrderItem itemRef;
-
     @OneToMany(mappedBy = "resultRef", fetch = FetchType.LAZY)
     private List<FlaggingApplied> flags;
 
@@ -138,9 +133,5 @@ public class TestResult {
 
         // Fallback đo lường (không bắt buộc, có thể để service gán theo order.runAt)
         if (measuredAt == null) measuredAt = createdAt;
-
-        if (itemId != null && itemRef == null) {
-            throw new IllegalStateException("TestOrderItem must exist before creating TestResult");
-        }
     }
 }

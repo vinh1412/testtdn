@@ -2,6 +2,7 @@ package fit.warehouse_service.services;
 
 import fit.warehouse_service.dtos.request.LogReagentUsageRequest;
 import fit.warehouse_service.dtos.request.ReceiveReagentRequest;
+import fit.warehouse_service.dtos.response.ReagentLotStatusResponse;
 import fit.warehouse_service.dtos.response.ReagentSupplyHistoryResponse;
 import fit.warehouse_service.dtos.response.ReagentUsageHistoryResponse;
 import org.springframework.data.domain.Page;
@@ -24,4 +25,7 @@ public interface ReagentHistoryService {
 
     Page<ReagentUsageHistoryResponse> getReagentUsageHistory(String reagentTypeId, String reagentLotId, Pageable pageable);
 
+    boolean checkReagentStockExists(String vendorId, String lotNumber);
+
+    ReagentLotStatusResponse getReagentLotStatus(String lotNumber);
 }

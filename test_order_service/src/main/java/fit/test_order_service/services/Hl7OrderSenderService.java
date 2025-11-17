@@ -8,7 +8,7 @@ package fit.test_order_service.services;
 
 import fit.test_order_service.dtos.response.Hl7ProcessResponse;
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
+import fit.test_order_service.entities.TestResult;
 
 import java.util.List;
 
@@ -33,11 +33,9 @@ public interface Hl7OrderSenderService {
       * Gửi order đến máy phân tích và nhận về HL7 response dưới dạng chuỗi.
       *
       * @param order đối tượng TestOrder cần gửi
-      * @param items danh sách các TestOrderItem liên quan đến order
+      * @param testResults danh sách các test result
       *
       * @return chuỗi HL7 response từ máy phân tích
       */
-     String sendOrderToInstrument(TestOrder order, List<TestOrderItem> items);
-
-    String requestAnalysis(String testOrderId);
+     String sendOrderToInstrument(TestOrder order, List<TestResult> testResults);
 }

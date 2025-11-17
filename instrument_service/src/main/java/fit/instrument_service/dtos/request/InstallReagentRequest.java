@@ -11,6 +11,9 @@ import java.time.LocalDate;
 @Data
 public class InstallReagentRequest {
 
+    @NotBlank(message = "Vendor ID is required")
+    private String vendorId;
+
     @NotBlank(message = "Reagent name is required")
     private String reagentName;
 
@@ -25,12 +28,4 @@ public class InstallReagentRequest {
     @FutureOrPresent(message = "Expiration date must be in the present or future")
     private LocalDate expirationDate;
 
-    // Vendor info (Req 3.6.2.1)
-    @NotBlank(message = "Vendor ID is required")
-    private String vendorId;
-
-    @NotBlank(message = "Vendor name is required")
-    private String vendorName;
-
-    private String vendorContact;
 }
