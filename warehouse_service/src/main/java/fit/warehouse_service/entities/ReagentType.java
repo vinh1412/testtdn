@@ -30,6 +30,12 @@ public class ReagentType extends BaseEntity {
 
     private String casNumber;
 
+    @Column(length = 1024)
+    private String description;
+
+    @Column(name = "usage_per_run")
+    private String usagePerRun;
+
     @Override
     public String generateId() {
         return IdGenerator.generate("RTY"); // Tiền tố "RTY" (Reagent Type)

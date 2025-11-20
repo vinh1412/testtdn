@@ -6,8 +6,10 @@
 
 package fit.test_order_service.dtos.request;
 
-import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.*;
 import lombok.Data;
+
+import java.time.LocalDate;
 
 /*
  * @description: Request DTO for updating a test order
@@ -17,15 +19,24 @@ import lombok.Data;
  */
 @Data
 public class UpdateTestOrderRequest {
-    @Pattern(regexp = "^(PENDING|COMPLETED|CANCELLED)$",
-            message = "Status must be one of: PENDING, COMPLETED, CANCELLED")
-    private String status;
+    @Size(max = 150, message = "Full name must not exceed 150 characters")
+    private String fullName;
 
-    @Pattern(regexp = "^(NONE|HUMAN_REVIEWED|AI_REVIEWED)$",
-            message = "Review status must be one of: NONE, HUMAN_REVIEWED, AI_REVIEWED")
-    private String reviewStatus;
+    @Past(message = "Date of birth must be in the past")
+    private LocalDate dateOfBirth;
 
-    @Pattern(regexp = "^(HUMAN|AI)$",
-            message = "Review mode must be one of: HUMAN, AI")
-    private String reviewMode;
+    @Pattern(regexp = "^(MALE|FEMALE|OTHER)$",
+            message = "Gender must be one of: MALE, FEMALE, OTHER")
+    private String gender;
+
+    @Size(max = 255, message = "Address must not exceed 255 characters")
+    private String address;
+
+    @Pattern(regexp = "^[0-9+\\-\\s()]*$", message = "Phone number contains invalid characters")
+    @Size(max = 20, message = "Phone number must not exceed 20 characters")
+    private String phone;
+
+    @Email(message = "Email must be in valid format")
+    @Size(max = 128, message = "Email must not exceed 128 characters")
+    private String email;
 }

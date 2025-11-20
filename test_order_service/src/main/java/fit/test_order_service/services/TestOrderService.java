@@ -26,6 +26,8 @@ public interface TestOrderService {
 
     TestOrderDetailResponse getTestOrderById(String id);
 
+    TestOrderResponse getTestOrderByTestOrderId(String id);
+
     void deleteTestOrder(String id);
 
     TestOrderResponse updateTestOrderByCode(String orderCode, UpdateTestOrderRequest request);
@@ -68,4 +70,6 @@ public interface TestOrderService {
      * @return Thông tin đơn xét nghiệm được tạo.
      */
     TestOrderResponse createShellOrderFromBarcode(String barcode);
+
+
 }

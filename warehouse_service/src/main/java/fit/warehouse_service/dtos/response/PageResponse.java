@@ -33,12 +33,12 @@ public class PageResponse<T> {
 
     private List<String> sorts;
 
-    private ConfigurationFilterInfo filters;
+    private FilterInfo filters;
 
     private boolean last;
 
     // Convert a Spring Data Page object to a PageResponse
-    public static <T> PageResponse<T> from(Page<T> page, ConfigurationFilterInfo filterInfo) {
+    public static <T> PageResponse<T> from(Page<T> page, FilterInfo filterInfo) {
         List<String> sortInfos = page.getSort().isSorted()
                 ? page.getSort().stream()
                 .map(order -> order.getProperty() + ": " + order.getDirection())

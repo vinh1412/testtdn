@@ -41,4 +41,11 @@ public class NotificationServiceImpl implements NotificationService {
         log.warn("Notification: Insufficient reagents for instrument {}", instrumentId);
         // TODO: Implement actual notification via RabbitMQ/WebSocket
     }
+
+    @Override
+    public void notifyReagentEmpty(String instrumentId, String reagentName) {
+        log.info("Notification: Reagent {} is empty for instrument {}",
+                reagentName, instrumentId);
+        // TODO: Implement actual notification via RabbitMQ/WebSocket
+    }
 }

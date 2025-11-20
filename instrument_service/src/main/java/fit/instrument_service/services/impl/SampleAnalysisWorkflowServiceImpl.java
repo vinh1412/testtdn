@@ -18,10 +18,7 @@ import fit.instrument_service.dtos.request.SampleInput;
 import fit.instrument_service.dtos.response.SampleResponse;
 import fit.instrument_service.dtos.response.WorkflowResponse;
 import fit.instrument_service.entities.*;
-import fit.instrument_service.enums.InstrumentStatus;
-import fit.instrument_service.enums.PublishStatus;
-import fit.instrument_service.enums.SampleStatus;
-import fit.instrument_service.enums.WorkflowStatus;
+import fit.instrument_service.enums.*;
 import fit.instrument_service.exceptions.NotFoundException;
 import fit.instrument_service.repositories.*;
 import fit.instrument_service.services.BarcodeValidationService;
@@ -54,6 +51,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
     private final InstrumentRepository instrumentRepository;
     private final BloodSampleRepository bloodSampleRepository;
     private final RawTestResultRepository rawTestResultRepository;
+    private final InstrumentReagentRepository instrumentReagentRepository;
     private final SampleProcessingWorkflowRepository workflowRepository;
     private final CassetteRepository cassetteRepository;
     private final BarcodeValidationService barcodeValidationService;
@@ -262,6 +260,8 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         try {
             Thread.sleep(100); // Giả lập thời gian xử lý
 
+            deductReagents(sample.getInstrumentId());
+
             Map<String, String> simulatedResults = new HashMap<>();
             simulatedResults.put("WBC", String.format("%.1f", 4.0 + (random.nextDouble() * 6.0))); // vd: 7.2
             simulatedResults.put("RBC", String.format("%.1f", 3.5 + (random.nextDouble() * 2.0))); // vd: 4.8
@@ -300,6 +300,47 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             notificationService.notifySampleStatusUpdate(sample);
         }
     }
+
+    private void deductReagents(String instrumentId) {
+        log.info("Deducting reagents for instrument: {}", instrumentId);
+
+        // Lấy tất cả lô hóa chất đang In Use
+        List<InstrumentReagent> reagents =
+                instrumentReagentRepository.findByInstrumentId(instrumentId)
+                        .stream()
+                        .filter(r -> r.getStatus() == ReagentStatus.IN_USE)
+                        .collect(Collectors.toList());
+
+        if (reagents.isEmpty()) {
+            log.error("No reagent in use for instrument {}", instrumentId);
+            notificationService.notifyInsufficientReagents(instrumentId);
+            throw new IllegalStateException("No reagent available for this instrument");
+        }
+
+        // Giảm mỗi reagent 1 đơn vị
+        for (InstrumentReagent reagent : reagents) {
+            int oldQuantity = reagent.getQuantity();
+            int newQuantity = Math.max(0, oldQuantity - 1);
+
+            reagent.setQuantity(newQuantity);
+            instrumentReagentRepository.save(reagent);
+
+            log.info("Reagent {} deducted: {} -> {}", reagent.getReagentName(), oldQuantity, newQuantity);
+
+            // Nếu hết hóa chất thì thông báo + chuyển trạng thái máy
+            if (newQuantity == 0) {
+                notificationService.notifyReagentEmpty(instrumentId, reagent.getReagentName());
+
+                instrumentRepository.findById(instrumentId).ifPresent(inst -> {
+                    inst.setStatus(InstrumentStatus.ERROR);
+                    instrumentRepository.save(inst);
+                });
+
+                throw new IllegalStateException("Reagent exhausted: " + reagent.getReagentName());
+            }
+        }
+    }
+
 
     private String getHl7DateTime(LocalDateTime ldt) {
         if(ldt == null) return null;

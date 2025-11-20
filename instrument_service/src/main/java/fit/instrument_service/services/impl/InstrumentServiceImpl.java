@@ -15,6 +15,7 @@ import fit.instrument_service.dtos.request.ModifyReagentStatusRequest;
 import fit.instrument_service.dtos.response.ApiResponse;
 import fit.instrument_service.dtos.response.InstrumentReagentResponse;
 import fit.instrument_service.dtos.response.InstrumentResponse;
+import fit.instrument_service.dtos.response.VendorResponse;
 import fit.instrument_service.embedded.Vendor;
 import fit.instrument_service.entities.Configuration;
 import fit.instrument_service.entities.Instrument;
@@ -141,7 +142,6 @@ public class InstrumentServiceImpl implements InstrumentService {
             logEntry.setNewMode(InstrumentMode.INACTIVE);
             logEntry.setReason("Re-activated from Warehouse.");
             instrumentModeLogRepository.save(logEntry);
-
         } else {
             log.info("Handling new InstrumentActivatedEvent for id: {}", event.getId());
             instrument = new Instrument();
@@ -251,6 +251,25 @@ public class InstrumentServiceImpl implements InstrumentService {
             throw new RuntimeException("Unable to verify reagent stock (quantity): " + e.getMessage());
         }
 
+        VendorResponse vendorDetails;
+        try {
+            log.debug("Fetching vendor details from warehouse for ID: {}", request.getVendorId());
+            ApiResponse<VendorResponse> vendorApiResponse = warehouseFeignClient.getVendorById(request.getVendorId());
+
+            if (vendorApiResponse == null || !vendorApiResponse.isSuccess() || vendorApiResponse.getData() == null) {
+                throw new RuntimeException("Failed to get vendor details from warehouse. Empty response.");
+            }
+            vendorDetails = vendorApiResponse.getData();
+            log.info("Successfully fetched vendor details: {}", vendorDetails.getName());
+
+        } catch (FeignException.NotFound e) {
+            log.warn("Fetch failed: Vendor ID {} not found in warehouse.", request.getVendorId());
+            // Lỗi này không nên xảy ra nếu Bước 1 (validateReagentStock) thành công, nhưng vẫn xử lý
+            throw new NotFoundException("Validation failed: Vendor details not found in warehouse.");
+        } catch (Exception e) {
+            log.error("Error during vendor details fetch: {}", e.getMessage(), e);
+            throw new RuntimeException("Unable to fetch vendor details: " + e.getMessage());
+        }
         // --- Kiểm tra số lượng (THEO YÊU CẦU CỦA BẠN) ---
         // So sánh số lượng tồn kho (double) với số lượng cài đặt (Integer)
         if (lotStatus.getCurrentQuantity() < request.getQuantity()) {
@@ -279,7 +298,11 @@ public class InstrumentServiceImpl implements InstrumentService {
         reagent.setLotNumber(request.getLotNumber());
         reagent.setQuantity(request.getQuantity()); // Số lượng của chai/hộp này
         reagent.setExpirationDate(request.getExpirationDate());
-        reagent.setVendor(new Vendor(request.getVendorId(), null, null)); // Chỉ lưu ID vendor
+        reagent.setVendor(new Vendor(
+                vendorDetails.getId(),
+                vendorDetails.getName(),
+                vendorDetails.getContactPerson() // Hoặc vendorDetails.getPhone() tùy bạn chọn
+        )); // Chỉ lưu ID vendor
         reagent.setStatus(ReagentStatus.NOT_IN_USE);
         reagent.setDeleted(false);
 

@@ -46,7 +46,7 @@ public class TestResult {
     @Column(name = "order_id", length = 36, nullable = false)
     private String orderId;
 
-    @Column(name = "item_id", length = 36)
+    @Column(name = "test_code", length = 36)
     private String testCode;
 
     @NotNull

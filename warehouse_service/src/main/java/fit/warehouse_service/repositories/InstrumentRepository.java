@@ -37,4 +37,6 @@ public interface InstrumentRepository extends JpaRepository<Instrument, String>,
      * @return true nếu tồn tại, ngược lại là false.
      */
     boolean existsBySerialNumber(String serialNumber);
+
+    boolean existsByIpAddressAndPort(String ipAddress, int port);
 }

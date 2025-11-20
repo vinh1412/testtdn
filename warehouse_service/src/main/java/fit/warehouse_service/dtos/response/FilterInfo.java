@@ -22,7 +22,7 @@ import java.time.LocalDate;
 @Data
 @Builder
 @JsonInclude(JsonInclude.Include.NON_NULL)
-public class ConfigurationFilterInfo {
+public class FilterInfo {
     private String search;
 
     private DataType dataType;

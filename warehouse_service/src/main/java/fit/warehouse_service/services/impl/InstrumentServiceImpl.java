@@ -93,8 +93,16 @@ public class InstrumentServiceImpl implements InstrumentService {
             throw new DuplicateResourceException("Serial number already exists: " + request.getSerialNumber());
         }
 
+        // Check for duplicate IP and Port combination
+        if (instrumentRepository.existsByIpAddressAndPort(request.getIpAddress(), request.getPort())) {
+            throw new DuplicateResourceException(
+                    String.format("Instrument with IP address '%s' and Port '%d' already exists.",
+                            request.getIpAddress(), request.getPort())
+            );
+        }
+
         // Verify vendor exists
-        Vendor vendor=vendorRepository.findById(request.getVendorId())
+        Vendor vendor = vendorRepository.findById(request.getVendorId())
                 .orElseThrow(() -> new ResourceNotFoundException("Vendor with ID '" + request.getVendorId() + "' not found."));
 
         Instrument instrument = new Instrument();
@@ -454,7 +462,7 @@ public class InstrumentServiceImpl implements InstrumentService {
         Page<InstrumentResponse> dtoPage = pageInstruments.map(instrumentMapper::toResponse);
 
         // Tạo đối tượng FilterInfo để trả về thông tin lọc (sử dụng lại ConfigurationFilterInfo theo yêu cầu)
-        ConfigurationFilterInfo filterInfo = ConfigurationFilterInfo.builder()
+        FilterInfo filterInfo = FilterInfo.builder()
                 .search(search)
                 .startDate(startDate)
                 .endDate(endDate)

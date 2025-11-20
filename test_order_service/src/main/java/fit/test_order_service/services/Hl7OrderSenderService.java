@@ -37,5 +37,9 @@ public interface Hl7OrderSenderService {
       *
       * @return chuỗi HL7 response từ máy phân tích
       */
-     String sendOrderToInstrument(TestOrder order, List<TestResult> testResults);
+     String sendOrderToInstrument(TestOrder order, List<TestOrderItem> items);
+
+    String requestAnalysis(String testOrderId);
+
+    String sendOrderToInstrument(TestOrder order, List<TestResult> testResults);
 }

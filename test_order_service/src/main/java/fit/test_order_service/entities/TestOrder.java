@@ -60,8 +60,8 @@ public class TestOrder {
     @Column(name = "date_of_birth", columnDefinition = "date", nullable = false)
     private LocalDate dateOfBirth;
 
-    @Column(name = "barcode", unique = true) // 'unique = true' là tùy chọn, nhưng nên có
-    private String barcode; // <-- THÊM TRƯỜNG NÀY
+    @Column(name = "barcode", unique = true)
+    private String barcode;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "entry_source")
@@ -164,6 +164,20 @@ public class TestOrder {
     @OneToMany(mappedBy = "printOrderRef", fetch = FetchType.LAZY)
     @OrderBy("createdAt DESC")
     private List<ReportJob> relatedPrintJobs;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "test_type_id", nullable = false)
+    private TestType testTypeRef;
+
+    @NotBlank
+    @Size(max = 36)
+    @Column(name = "test_type_id_snapshot", length = 36, nullable = false)
+    private String testTypeIdSnapshot;
+
+    @NotBlank
+    @Size(max = 100)
+    @Column(name = "test_type_name_snapshot", length = 100, nullable = false)
+    private String testTypeNameSnapshot;
 
     @PrePersist
     void pp() {

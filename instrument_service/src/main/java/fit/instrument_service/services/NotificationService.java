@@ -36,4 +36,12 @@ public interface NotificationService {
      * @param instrumentId ID của thiết bị
      */
     void notifyInsufficientReagents(String instrumentId);
+
+    /**
+     * Gửi thông báo khi hóa chất trong thiết bị đã hết
+     *
+     * @param instrumentId ID của thiết bị
+     * @param reagentName  Tên hóa chất đã hết
+     */
+    void notifyReagentEmpty(String instrumentId, String reagentName);
 }

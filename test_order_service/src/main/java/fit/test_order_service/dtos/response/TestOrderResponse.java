@@ -19,9 +19,10 @@ import java.util.List;
 public class TestOrderResponse {
     private String id;
     private String orderCode;
-
+    private String barcode;
     String medicalRecordId;
     String medicalRecordCode;
+    TestTypeResponse testType;
 
     String fullName;
     private Integer age;
@@ -48,4 +49,7 @@ public class TestOrderResponse {
 
     private LocalDateTime deletedAt;
     private String deletedBy;
+
+    private List<TestResultResponse> results;
+    private List<OrderCommentResponse> comments;
 }

@@ -29,4 +29,9 @@ public class SortFields {
 
     public static final String DEFAULT_INSTRUMENT_SORT = "updatedAt";
     // --- KẾT THÚC THÊM ---
+
+    public static final Set<String> TEST_PARAMETER_SORT_FIELDS =
+            Set.of("createdAt", "paramName", "abbreviation", "updatedAt");
+
+    public static final String DEFAULT_TEST_PARAMETER_SORT = "createdAt";
 }

@@ -21,7 +21,13 @@ import java.util.Set;
 @Getter
 @Setter
 @Entity
-@Table(name = "instruments")
+@Table(
+        name = "instruments",
+        uniqueConstraints = {
+                // Đảm bảo cặp ipAddress và port là duy nhất trong DB
+                @UniqueConstraint(columnNames = {"ipAddress", "port"})
+        }
+)
 public class Instrument extends BaseEntity {
 
     @Column(unique = true, nullable = false)

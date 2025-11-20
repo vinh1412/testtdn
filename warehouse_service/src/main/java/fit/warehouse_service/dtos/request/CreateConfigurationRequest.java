@@ -12,6 +12,7 @@ package fit.warehouse_service.dtos.request;/*
 import fit.warehouse_service.enums.DataType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.Getter;
 import lombok.Setter;
@@ -25,6 +26,10 @@ public class CreateConfigurationRequest {
 
     @NotBlank(message = "Configuration name cannot be blank.")
     @Size(max = 255, message = "Name must not exceed 255 characters.")
+    @Pattern(
+            regexp = "^[A-Z0-9]+(_[A-Z0-9]+)*$",
+            message = "Configuration name must be in uppercase, separated by underscores (e.g. CONFIG_NAME)."
+    )
     private String name;
 
     private String description;

@@ -10,10 +10,15 @@ package fit.test_order_service.dtos.request;/*
  */
 
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import lombok.Data;
 
 @Data
 public class CreateTestOrderRequest {
+
+    @NotBlank
+    @Size(max = 36)
+    private String testTypeId;
 
     @NotBlank(message = "Medical Record Code is required")
     private String medicalRecordCode;

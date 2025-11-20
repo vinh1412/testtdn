@@ -13,7 +13,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import fit.warehouse_service.constants.SortFields;
 import fit.warehouse_service.dtos.request.CreateConfigurationRequest;
 import fit.warehouse_service.dtos.request.ModifyConfigurationRequest;
-import fit.warehouse_service.dtos.response.ConfigurationFilterInfo;
+import fit.warehouse_service.dtos.response.FilterInfo;
 import fit.warehouse_service.dtos.response.ConfigurationResponse;
 import fit.warehouse_service.dtos.response.PageResponse;
 import fit.warehouse_service.entities.ConfigurationSetting;
@@ -169,7 +169,7 @@ public class ConfigurationServiceImpl implements ConfigurationService {
         Page<ConfigurationResponse> dtoPage = pageConfigs.map(configurationMapper::toResponseUpdate);
 
         // Tạo đối tượng FilterInfo để trả về thông tin lọc
-        ConfigurationFilterInfo filterInfo = ConfigurationFilterInfo.builder()
+        FilterInfo filterInfo = FilterInfo.builder()
                 .search(search)
                 .dataType(dataType)
                 .startDate(startDate)
