@@ -7,6 +7,7 @@
 package fit.instrument_service.client;
 
 import fit.instrument_service.client.dtos.TestOrderDetailResponse;
+import fit.instrument_service.client.dtos.TestOrderResponse;
 import fit.instrument_service.configs.FeignClientConfig;
 import fit.instrument_service.dtos.response.ApiResponse;
 import org.springframework.cloud.openfeign.FeignClient;
@@ -37,4 +38,7 @@ public interface TestOrderFeignClient {
 
     @GetMapping("/api/v1/internal/test-orders/full/{id}")
     ApiResponse<TestOrderDetailResponse> getTestOrderDetailsById(@PathVariable("id") String id);
+
+    @GetMapping("/api/v1/test-orders/{testOrderById}/full")
+    ApiResponse<TestOrderResponse> getTestOrderByTestOrderId(@PathVariable String testOrderById);
 }
