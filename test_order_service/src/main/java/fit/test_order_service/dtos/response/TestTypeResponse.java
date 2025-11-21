@@ -1,6 +1,5 @@
 package fit.test_order_service.dtos.response;
 
-import fit.test_order_service.client.dtos.TestParameterResponse;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
@@ -23,7 +22,13 @@ public class TestTypeResponse {
 
     private double requiredVolume;
 
+    List<TestParameterResponse> testParameters;
+
     private LocalDateTime createdAt;
 
-    List<TestParameterResponse> testParameters;
+    private String createdBy;
+
+    private LocalDateTime updatedAt;
+
+    private String updatedBy;
 }

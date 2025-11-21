@@ -12,7 +12,6 @@ import fit.test_order_service.dtos.request.InstrumentOrderRequest;
 import fit.test_order_service.dtos.response.Hl7ProcessResponse;
 import fit.test_order_service.dtos.response.TestOrderDetailResponse;
 import fit.test_order_service.entities.TestOrder;
-import fit.test_order_service.entities.TestOrderItem;
 import fit.test_order_service.enums.OrderStatus;
 import fit.test_order_service.exceptions.BadRequestException;
 import fit.test_order_service.entities.TestResult;

@@ -2,8 +2,10 @@ package fit.test_order_service.entities;
 
 import fit.test_order_service.utils.TestOrderGenerator;
 import jakarta.persistence.*;
+import jakarta.validation.constraints.NotBlank;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
+import org.hibernate.annotations.DynamicUpdate;
 
 import java.time.LocalDateTime;
 import java.util.UUID;
@@ -18,6 +20,7 @@ import java.time.ZoneOffset;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@DynamicUpdate
 @Builder
 public class TestType {
 
@@ -46,6 +49,16 @@ public class TestType {
     @Column(name = "created_at", columnDefinition = "datetime(6)", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
+    @Column(name = "created_by", length = 36, nullable = false, updatable = false)
+    private String createdBy;
+
+    @Column(name = "updated_at", columnDefinition = "datetime(6)")
+    private LocalDateTime updatedAt;
+
+    @Column(name = "updated_by", length = 36)
+    private String updatedBy;
+
+
     @PrePersist
     void prePersist() {
         if (id == null) {
@@ -57,4 +70,6 @@ public class TestType {
             createdAt = LocalDateTime.now(ZoneOffset.UTC);
         }
     }
+
+
 }

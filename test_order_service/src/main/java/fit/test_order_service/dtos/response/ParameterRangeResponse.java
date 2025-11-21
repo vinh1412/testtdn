@@ -4,7 +4,7 @@
  * Copyright (c) 2025 IUH. All rights reserved.
  */
 
-package fit.test_order_service.client.dtos;
+package fit.test_order_service.dtos.response;
 
 import lombok.Builder;
 import lombok.Data;
