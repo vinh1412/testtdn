@@ -15,6 +15,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.*;
@@ -35,11 +36,17 @@ public class Hl7ProcessingController {
 
     private final Hl7OrderSenderService hl7OrderSenderService;
 
-    @PostMapping("/process")
+    @PostMapping(
+            value = "/process",
+            consumes = MediaType.TEXT_PLAIN_VALUE,
+            produces = MediaType.APPLICATION_JSON_VALUE
+    )
     public ResponseEntity<ApiResponse<Hl7ProcessResponse>> processHl7Message(
-            @Valid @RequestBody Hl7MessageRequest request) {
+            @RequestBody String rawHl7) {
 
-        Hl7ProcessResponse response = hl7ProcessingService.processHl7Message(request);
+        Hl7MessageRequest hl7MessageRequest = new Hl7MessageRequest(rawHl7);
+
+        Hl7ProcessResponse response = hl7ProcessingService.processHl7Message(hl7MessageRequest);
         if ("FAILED".equals(response.getStatus())) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(ApiResponse.<Hl7ProcessResponse>builder()
