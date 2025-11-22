@@ -34,7 +34,7 @@ public class Hl7ProcessingController {
 
     private final Hl7ProcessingService hl7ProcessingService;
 
-    private final Hl7OrderSenderService hl7OrderSenderService;
+//    private final Hl7OrderSenderService hl7OrderSenderService;
 
     @PostMapping(
             value = "/process",
@@ -67,15 +67,15 @@ public class Hl7ProcessingController {
         );
     }
 
-    @PostMapping("/{testOrderId}/request")
-    public ResponseEntity<ApiResponse<String>> sendOrderToInstrument(
-            @PathVariable String testOrderId
-    ) {
-        log.info("[API] Sending HL7 order request for TestOrder ID: {}", testOrderId);
-        String response = hl7OrderSenderService.requestAnalysis(testOrderId);
-
-        return ResponseEntity.ok(
-                ApiResponse.success(response, "HL7 order request sent successfully")
-        );
-    }
+//    @PostMapping("/{testOrderId}/request")
+//    public ResponseEntity<ApiResponse<String>> sendOrderToInstrument(
+//            @PathVariable String testOrderId
+//    ) {
+//        log.info("[API] Sending HL7 order request for TestOrder ID: {}", testOrderId);
+//        String response = hl7OrderSenderService.requestAnalysis(testOrderId);
+//
+//        return ResponseEntity.ok(
+//                ApiResponse.success(response, "HL7 order request sent successfully")
+//        );
+//    }
 }

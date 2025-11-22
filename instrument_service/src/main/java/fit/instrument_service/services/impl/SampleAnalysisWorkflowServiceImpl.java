@@ -12,7 +12,9 @@ import ca.uhn.hl7v2.model.v25.segment.*;
 import ca.uhn.hl7v2.parser.Parser;
 import feign.FeignException;
 import fit.instrument_service.client.TestOrderFeignClient;
+import fit.instrument_service.client.WarehouseFeignClient;
 import fit.instrument_service.client.dtos.*;
+import fit.instrument_service.client.dtos.ReagentLotStatusResponse;
 import fit.instrument_service.client.dtos.enums.Gender;
 import fit.instrument_service.dtos.request.InitiateWorkflowRequest;
 import fit.instrument_service.dtos.request.SampleInput;
@@ -37,6 +39,8 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 /*
@@ -60,6 +64,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
     private final ReagentCheckService reagentCheckService;
     private final NotificationService notificationService;
     private final TestOrderFeignClient testOrderFeignClient;
+    private final WarehouseFeignClient warehouseFeignClient;
     private final Parser parser;
     private final Random random = new Random();
 
@@ -379,7 +384,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
                 instrumentReagentRepository.findByInstrumentId(instrumentId)
                         .stream()
                         .filter(r -> r.getStatus() == ReagentStatus.IN_USE)
-                        .collect(Collectors.toList());
+                        .toList();
 
         // Nếu không có hóa chất nào thì thông báo và dừng quy trình
         if (reagents.isEmpty()) {
@@ -388,15 +393,16 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             throw new IllegalStateException("No reagent available for this instrument");
         }
 
-        // Giảm mỗi reagent 1 đơn vị
+        // Giảm mỗi reagent theo định mức sử dụng mỗi lần chạy
         for (InstrumentReagent reagent : reagents) {
-            int oldQuantity = reagent.getQuantity();
-            int newQuantity = Math.max(0, oldQuantity - 1);
+            int usageAmount = determineUsageAmount(reagent);
+            int oldQuantity = Optional.ofNullable(reagent.getQuantity()).orElse(0);
+            int newQuantity = Math.max(0, oldQuantity - usageAmount);
 
             reagent.setQuantity(newQuantity);
             instrumentReagentRepository.save(reagent);
 
-            log.info("Reagent {} deducted: {} -> {}", reagent.getReagentName(), oldQuantity, newQuantity);
+            log.info("Reagent {} deducted by {}: {} -> {}", reagent.getReagentName(), usageAmount, oldQuantity, newQuantity);
 
             // Nếu hết hóa chất thì thông báo + chuyển trạng thái máy
             if (newQuantity == 0) {
@@ -410,6 +416,67 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
                 throw new IllegalStateException("Reagent exhausted: " + reagent.getReagentName());
             }
         }
+    }
+
+    // Hàm xác định mức sử dụng hóa chất cho mỗi mẫu
+    private int determineUsageAmount(InstrumentReagent reagent) {
+        // Lấy mức sử dụng mỗi lần chạy từ Warehouse Service
+        String usageDescriptor = fetchUsagePerRun(reagent.getLotNumber());
+
+        // Nếu không có mô tả mức sử dụng thì mặc định là 1
+        if (!StringUtils.hasText(usageDescriptor)) {
+            log.warn("Usage per run is unavailable for lot {}. Defaulting deduction to 1.", reagent.getLotNumber());
+            return 1;
+        }
+
+        // Phân tích mô tả mức sử dụng để lấy số lượng
+        return parseUsageAmount(usageDescriptor)
+                // Làm tròn lên và đảm bảo ít nhất là 1
+                .map(amount -> (int) Math.max(1, Math.ceil(amount)))
+                // Nếu không thể phân tích được thì mặc định là 1
+                .orElseGet(() -> {
+                    log.warn("Could not parse usage per run '{}' for lot {}. Defaulting deduction to 1.",
+                            usageDescriptor, reagent.getLotNumber());
+                    return 1;
+                });
+    }
+
+    // Hàm phân tích mô tả mức sử dụng để lấy số lượng
+    private Optional<Double> parseUsageAmount(String usageDescriptor) {
+        try {
+            // Sử dụng regex để tìm số trong chuỗi
+            Matcher matcher = Pattern.compile("([0-9]+(?:\\.[0-9]+)?)").matcher(usageDescriptor);
+
+            // Nếu tìm thấy thì trả về số đã phân tích
+            if (matcher.find()) {
+                return Optional.of(Double.parseDouble(matcher.group(1)));
+            }
+        } catch (Exception e) {
+            log.error("Error parsing usage descriptor '{}': {}", usageDescriptor, e.getMessage());
+        }
+
+        return Optional.empty();
+    }
+
+    // Hàm lấy mức sử dụng hóa chất cho mỗi lần chạy từ Warehouse Service
+    private String fetchUsagePerRun(String lotNumber) {
+        try {
+            // Gọi API từ Warehouse Service để lấy trạng thái lô hóa chất
+            ApiResponse<ReagentLotStatusResponse> response = warehouseFeignClient.getReagentLotStatus(lotNumber);
+
+            // Kiểm tra phản hồi và trả về mức sử dụng mỗi lần chạy nếu có
+            if (response != null && response.isSuccess() && response.getData() != null) {
+                return response.getData().getUsagePerRun();
+            }
+
+            log.warn("Usage per run missing for lot {} from warehouse response.", lotNumber);
+        } catch (FeignException e) {
+            log.error("Failed to fetch reagent lot status for {}: {}", lotNumber, e.getMessage());
+        } catch (Exception e) {
+            log.error("Unexpected error while fetching reagent usage for {}: {}", lotNumber, e.getMessage());
+        }
+
+        return null;
     }
 
     // Hàm lấy chi tiết đơn hàng xét nghiệm
