@@ -209,10 +209,10 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             sample.setTestOrderId(newTestOrderId);
             sample.setTestOrderAutoCreated(true);
 
-//            notificationService.notifyAutoCreatedTestOrder(newTestOrderId, input.getBarcode());
+            notificationService.notifyAutoCreatedTestOrder(newTestOrderId, input.getBarcode());
         }
 
-        // STEP 4 — Mark VALIDATED
+        // Đặt trạng thái mẫu thành VALIDATED và thông báo
         sample.setStatus(SampleStatus.VALIDATED);
         bloodSampleRepository.save(sample);
         notificationService.notifySampleStatusUpdate(sample);
@@ -230,7 +230,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             request.setAutoCreated(true);
             request.setRequiresPatientMatch(true);
 
-            // Gọi API auto-create
+            // Gọi API auto-create từ Test Order Service
             ApiResponse<TestOrderResponse> response =
                     testOrderFeignClient.autoCreateTestOrder(request);
 
@@ -238,9 +238,10 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             log.debug("Auto-create response data: {}", data);
             String testOrderId = (data != null ? data.getId() : null);
 
+            // Nếu không nhận được ID thì tạo ID giả
             if (!StringUtils.hasText(testOrderId)) {
                 log.warn("Auto-create returned empty ID for barcode: {}", barcode);
-                testOrderId = "PENDING_" + UUID.randomUUID();
+                testOrderId = "AUTO_CREATE" + UUID.randomUUID();
             }
 
             log.info("Auto-created TestOrder: {} for barcode: {}", testOrderId, barcode);
@@ -248,11 +249,14 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
 
         } catch (FeignException e) {
             log.error("Failed to auto-create TestOrder for barcode {}. Cause: {}", barcode, e.getMessage());
+
+            // Đánh dấu dịch vụ Test Order không khả dụng
             markTestOrderServiceUnavailable(workflowId);
-            return "PENDING_" + UUID.randomUUID();
+            return "AUTO_CREATE" + UUID.randomUUID();
         }
     }
 
+    // Hàm đánh dấu dịch vụ Test Order không khả dụng trong workflow
     private void markTestOrderServiceUnavailable(String workflowId) {
         workflowRepository.findById(workflowId).ifPresent(workflow -> {
             workflow.setTestOrderServiceAvailable(false);
@@ -272,7 +276,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             List<BloodSample> samples = bloodSampleRepository.findByWorkflowId(workflow.getId());
             List<BloodSample> validatedSamples = samples.stream()
                     .filter(s -> s.getStatus() == SampleStatus.VALIDATED)
-                    .collect(Collectors.toList());
+                    .toList();
 
             // Đặt trạng thái mẫu thành QUEUED và thông báo
             for (BloodSample sample : validatedSamples) {
@@ -303,7 +307,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
             log.info("Workflow completed: {}", workflow.getId());
 
             // Check for next cassette
-//            processNextCassette(instrument.getId());
+            processNextCassette(instrument.getId());
 
         } catch (Exception e) {
             log.error("Workflow execution failed: {}", workflow.getId(), e);
@@ -316,7 +320,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         }
     }
 
-    // Hàm xử lý mẫ
+    // Hàm xử lý mẫu
     private void processSample(BloodSample sample) {
         log.info("Processing sample: {}", sample.getBarcode());
 
@@ -329,10 +333,14 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         try {
             Thread.sleep(100); // Giả lập thời gian xử lý
 
+            // Giảm hóa chất sử dụng cho mẫu
             deductReagents(sample.getInstrumentId());
 
+            // Lấy chi tiết đơn hàng xét nghiệm
             TestOrderResponse orderDetails = fetchTestOrderDetails(sample);
+            // Mô phỏng kết quả xét nghiệm
             Map<TestParameterResponse, Double> simulatedResults = simulateResults(orderDetails);
+            // Lưu kết quả thô vào cơ sở dữ liệu
             Map<String, String> rawResults = simulatedResults.entrySet().stream()
                     .collect(Collectors.toMap(
                             entry -> entry.getKey().getAbbreviation(),
@@ -362,6 +370,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         }
     }
 
+    // Hàm giảm hóa chất sử dụng cho mẫu
     private void deductReagents(String instrumentId) {
         log.info("Deducting reagents for instrument: {}", instrumentId);
 
@@ -372,6 +381,7 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
                         .filter(r -> r.getStatus() == ReagentStatus.IN_USE)
                         .collect(Collectors.toList());
 
+        // Nếu không có hóa chất nào thì thông báo và dừng quy trình
         if (reagents.isEmpty()) {
             log.error("No reagent in use for instrument {}", instrumentId);
             notificationService.notifyInsufficientReagents(instrumentId);
@@ -404,8 +414,8 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
 
     // Hàm lấy chi tiết đơn hàng xét nghiệm
     private TestOrderResponse fetchTestOrderDetails(BloodSample sample) {
-        if (!StringUtils.hasText(sample.getTestOrderId()) || sample.getTestOrderId().startsWith("PENDING_")) {
-            log.warn("Skipping patient detail fetch for PENDING or missing order.");
+        if (!StringUtils.hasText(sample.getTestOrderId()) || sample.getTestOrderId().startsWith("AUTO_CREATE_")) {
+            log.warn("Skipping patient detail fetch for AUTO_CREATE or missing order.");
             return null;
         }
 
@@ -715,53 +725,66 @@ public class SampleAnalysisWorkflowServiceImpl implements SampleAnalysisWorkflow
         log.debug("HL7 Message: \n{}", hl7Message.replace("\r", "\n"));
 
         // Luu kết quả thô vào cơ sở dữ liệu
+        RawTestResult rawResult = new RawTestResult();
+        rawResult.setInstrumentId(sample.getInstrumentId());
+        rawResult.setTestOrderId(sample.getTestOrderId());
+        rawResult.setBarcode(sample.getBarcode());
+        rawResult.setHl7Message(hl7Message);
+        rawResult.setRawResultData(rawResults);
+        rawResult.setPublishStatus(PublishStatus.PENDING);
+        rawResult.setReadyForDeletion(false);
+
         try {
-            RawTestResult rawResult = new RawTestResult();
-            rawResult.setInstrumentId(sample.getInstrumentId());
-            rawResult.setTestOrderId(sample.getTestOrderId());
-            rawResult.setBarcode(sample.getBarcode());
-            rawResult.setHl7Message(hl7Message);
-            rawResult.setRawResultData(rawResults); // Lưu dữ liệu thô (Map)
-
-            // Đặt trạng thái PENDING, chờ một dịch vụ khác (worker)
-            // lấy từ RabbitMQ và xử lý
-            rawResult.setPublishStatus(PublishStatus.PENDING);
-            rawResult.setReadyForDeletion(false); // Chưa sẵn sàng để xóa
-
-            rawTestResultRepository.save(rawResult);
-
+            rawResult = rawTestResultRepository.save(rawResult);
             log.info("Saved raw HL7 message to database with ID: {}", rawResult.getId());
-
-            // Cập nhật cờ 'resultsPublished' trên workflow
-            workflowRepository.findById(sample.getWorkflowId()).ifPresent(workflow -> {
-                workflow.setResultsPublished(true); // Đánh dấu là đã lưu
-                workflowRepository.save(workflow);
-            });
-
-            // TODO: Gửi tin nhắn vào RabbitMQ (ví dụ: gửi rawResult.getId())
-            // Bạn đã có RabbitMQConfig, bạn sẽ dùng RabbitTemplate để gửi
-            // rabbitTemplate.convertAndSend(
-            //     RabbitMQConfig.EXCHANGE_NAME,
-            //     RabbitMQConfig.ROUTING_KEY_RESULT, // (Giả sử bạn có routing key này)
-            //     rawResult.getId() // Gửi ID để worker tự truy vấn
-            // );
-
         } catch (Exception e) {
-            log.error("Failed to save RawTestResult for sample {}: {}", sample.getBarcode(), e.getMessage(), e);
+            handleRawResultPersistenceFailure(sample, e);
+            return;
+        }
 
-            // Nếu lưu DB thất bại, ta phải đánh dấu Sample là FAILED
-            sample.setStatus(SampleStatus.FAILED);
-            // sample.setSkipReason("Failed to save HL7 result"); // (Ghi chú lý do)
-            bloodSampleRepository.save(sample);
+        boolean publishedToTestOrder = publishToTestOrderService(hl7Message);
 
-            // Cập nhật Workflow là FAILED
-            workflowRepository.findById(sample.getWorkflowId()).ifPresent(workflow -> {
-                workflow.setStatus(WorkflowStatus.FAILED);
-                workflow.setErrorMessage("Failed to save RawTestResult for sample: " + sample.getBarcode());
-                workflowRepository.save(workflow);
-            });
+
+        PublishStatus publishStatus = (publishedToTestOrder )
+                ? PublishStatus.SENT
+                : PublishStatus.FAILED;
+
+        rawResult.setPublishStatus(publishStatus);
+        rawResult.setReadyForDeletion(publishedToTestOrder);
+        rawTestResultRepository.save(rawResult);
+
+        workflowRepository.findById(sample.getWorkflowId()).ifPresent(workflow -> {
+            workflow.setResultsPublished(true);
+            workflowRepository.save(workflow);
+        });
+    }
+
+    private boolean publishToTestOrderService(String hl7Message) {
+        try {
+            ApiResponse<Hl7ProcessResponse> response = testOrderFeignClient.publishHl7Result(hl7Message);
+            boolean success = response != null && Boolean.TRUE.equals(response.isSuccess());
+            if (!success) {
+                log.info("Test Order Service returned unsuccessful status for HL7 publish");
+            }
+            return success;
+        } catch (Exception e) {
+            log.error("Failed to publish HL7 results to Test Order Service: {}", e.getMessage());
+            return false;
         }
     }
+
+    private void handleRawResultPersistenceFailure(BloodSample sample, Exception e) {
+        log.error("Failed to save RawTestResult for sample {}: {}", sample.getBarcode(), e.getMessage(), e);
+
+        sample.setStatus(SampleStatus.FAILED);
+        bloodSampleRepository.save(sample);
+
+        workflowRepository.findById(sample.getWorkflowId()).ifPresent(workflow -> {
+        workflow.setStatus(WorkflowStatus.FAILED);
+        workflow.setErrorMessage("Failed to save RawTestResult for sample: " + sample.getBarcode());
+        workflowRepository.save(workflow);
+    });
+}
 
     @Override
     public WorkflowResponse processNextCassette(String instrumentId) {

@@ -44,4 +44,12 @@ public interface NotificationService {
      * @param reagentName  Tên hóa chất đã hết
      */
     void notifyReagentEmpty(String instrumentId, String reagentName);
+
+    /**
+     * Gửi thông báo khi một đơn hàng xét nghiệm được tạo tự động
+     *
+     * @param testOrderId ID của đơn hàng xét nghiệm
+     * @param barcode     Mã vạch liên quan đến đơn hàng
+     */
+    void notifyAutoCreatedTestOrder(String testOrderId, String barcode);
 }
