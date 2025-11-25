@@ -21,6 +21,7 @@ import fit.test_order_service.entities.*;
 import fit.test_order_service.enums.EntrySource;
 import fit.test_order_service.enums.IngestStatus;
 import fit.test_order_service.enums.ItemStatus;
+import fit.test_order_service.enums.OrderStatus;
 import fit.test_order_service.exceptions.AlreadyExistsException;
 import fit.test_order_service.exceptions.BadRequestException;
 import fit.test_order_service.repositories.*;
@@ -146,11 +147,23 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
                 resultIds.add(saved.getResultId());
 
                 // Áp dụng quy tắc đánh dấu (flagging rules)
-                flaggingService.applyFlaggingRules(saved);
+                //flaggingService.applyFlaggingRules(saved);
             }
 
             // Cập nhật trạng thái TestOrder nếu cần
-            testOrderStatusService.updateOrderStatusIfNeeded(orderId);
+            //testOrderStatusService.updateOrderStatusIfNeeded(orderId);
+            OrderStatus currentStatus = order.getStatus();
+            OrderStatus newStatus = determineOrderStatus(order);
+
+            if (currentStatus != newStatus) {
+                OrderStatus previousStatus = order.getStatus();
+                order.setStatus(newStatus);
+                order.setRunBy("INSTRUMENT_HL7_INGEST");
+                order.setRunAt(LocalDateTime.now(ZoneOffset.UTC));
+                testOrderRepository.save(order);
+
+                log.info("Order {} status updated from {} to {}", orderId, previousStatus, newStatus);
+            }
 
             // Cập nhật audit ingest thành công
             updateIngestAuditSuccess(ingestAudit);
@@ -169,6 +182,16 @@ public class Hl7ProcessingServiceImpl implements Hl7ProcessingService {
             handleParsingError(ingestAudit, e.getMessage(), rawMessage);
             throw new BadRequestException("Failed to parse HL7 message: " + e.getMessage());
         }
+    }
+
+    private OrderStatus determineOrderStatus(TestOrder order) {
+        List<TestResult> results = order.getResults();
+        if (results == null || results.isEmpty()) {
+            return OrderStatus.PENDING;
+        }
+
+        // Nếu đã có kết quả thì xem như đã hoàn tất
+        return OrderStatus.COMPLETED;
     }
 
     private String truncate(String value, int maxLength) {

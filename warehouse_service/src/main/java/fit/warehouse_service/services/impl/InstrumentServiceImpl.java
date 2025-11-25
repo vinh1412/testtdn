@@ -439,7 +439,7 @@ public class InstrumentServiceImpl implements InstrumentService {
 
     @Override
     @Transactional(readOnly = true)
-    public PageResponse<InstrumentResponse> getAllInstruments(int page, int size, String[] sort, String search, LocalDate startDate, LocalDate endDate) {
+    public PageResponse<InstrumentResponse> getAllInstruments(int page, int size, String[] sort, String search, String configType, LocalDate startDate, LocalDate endDate) {
         log.info("Fetching all instruments with filters: search='{}', startDate='{}', endDate='{}', page={}",
                 search, startDate, endDate, page);
 
@@ -464,13 +464,10 @@ public class InstrumentServiceImpl implements InstrumentService {
         // Tạo đối tượng FilterInfo để trả về thông tin lọc (sử dụng lại ConfigurationFilterInfo theo yêu cầu)
         FilterInfo filterInfo = FilterInfo.builder()
                 .search(search)
+                .configType(configType)
                 .startDate(startDate)
                 .endDate(endDate)
-                .dataType(null) // Như yêu cầu, không bao gồm dataType
                 .build();
-
-        log.info("Retrieved {} instruments.", dtoPage.getTotalElements());
-
         return PageResponse.from(dtoPage, filterInfo);
     }
 
